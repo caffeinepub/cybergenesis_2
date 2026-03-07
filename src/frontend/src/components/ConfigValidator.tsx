@@ -85,7 +85,7 @@ export default function ConfigValidator() {
             <div className="space-y-2 mb-4">
               {validation.errors.map((error, index) => (
                 <div
-                  key={index}
+                  key={error.slice(0, 20) || index}
                   className="flex items-start space-x-2 bg-red-800/50 p-3 rounded border border-red-600/50"
                 >
                   <AlertTriangle className="w-4 h-4 text-red-300 flex-shrink-0 mt-0.5" />
@@ -99,7 +99,7 @@ export default function ConfigValidator() {
               <div className="space-y-2 mb-4">
                 {validation.warnings.map((warning, index) => (
                   <div
-                    key={index}
+                    key={warning.slice(0, 20) || index}
                     className="flex items-start space-x-2 bg-yellow-900/30 p-3 rounded border border-yellow-600/50"
                   >
                     <AlertTriangle className="w-4 h-4 text-yellow-300 flex-shrink-0 mt-0.5" />

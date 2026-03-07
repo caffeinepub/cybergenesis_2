@@ -78,6 +78,7 @@ class ThreeErrorBoundary extends Component<
               {this.state.errorMessage}
             </p>
             <button
+              type="button"
               onClick={() => {
                 console.log("[ThreeErrorBoundary] 🔄 Resetting error state");
                 this.setState({ hasError: false, errorMessage: "" });

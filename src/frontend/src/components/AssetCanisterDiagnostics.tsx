@@ -333,9 +333,9 @@ export default function AssetCanisterDiagnostics() {
           addLog("info", `✅ GLB models inventory: ${glbModels.length} models`);
 
           if (glbModels.length > 0) {
-            glbModels.forEach(([filename, url]) => {
+            for (const [filename, url] of glbModels) {
               addLog("info", `  📦 ${filename}: ${url}`);
-            });
+            }
           }
         } catch (error: any) {
           const duration7 = performance.now() - startTime7;
@@ -547,7 +547,7 @@ export default function AssetCanisterDiagnostics() {
             <div className="space-y-2">
               {tests.map((test, index) => (
                 <div
-                  key={index}
+                  key={test.name || index}
                   className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-gray-700/50"
                 >
                   <div className="flex items-center gap-3">
@@ -588,7 +588,7 @@ export default function AssetCanisterDiagnostics() {
             <div className="max-h-96 overflow-y-auto space-y-1 font-mono text-xs">
               {logs.map((log, index) => (
                 <div
-                  key={index}
+                  key={log.timestamp || index}
                   className="flex items-start gap-2 p-2 rounded bg-black/30 border border-gray-700/30"
                 >
                   {getLogIcon(log.level)}

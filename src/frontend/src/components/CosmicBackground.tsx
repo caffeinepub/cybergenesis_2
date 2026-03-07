@@ -99,7 +99,7 @@ export default function CosmicBackground() {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Draw nebulae with pulsing effect
-      nebulae.forEach((nebula) => {
+      for (const nebula of nebulae) {
         const pulseAlpha = nebula.alpha + Math.sin(nebula.pulse) * 0.02;
         const gradient = ctx.createRadialGradient(
           nebula.x,
@@ -130,10 +130,10 @@ export default function CosmicBackground() {
 
         if (nebula.x > canvas.width + nebula.radius) nebula.x = -nebula.radius;
         if (nebula.x < -nebula.radius) nebula.x = canvas.width + nebula.radius;
-      });
+      }
 
       // Draw stars with twinkling effect
-      stars.forEach((star) => {
+      for (const star of stars) {
         const x =
           (star.x - canvas.width / 2) * (canvas.width / star.z) +
           canvas.width / 2;
@@ -176,7 +176,7 @@ export default function CosmicBackground() {
           star.x = Math.random() * canvas.width;
           star.y = Math.random() * canvas.height;
         }
-      });
+      }
 
       animationFrameRef.current = requestAnimationFrame(animate);
     };

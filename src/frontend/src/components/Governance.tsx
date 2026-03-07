@@ -217,10 +217,14 @@ export default function Governance() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="font-jetbrains text-sm text-muted-foreground mb-2 block">
+                  <label
+                    htmlFor="stake-amount-input"
+                    className="font-jetbrains text-sm text-muted-foreground mb-2 block"
+                  >
                     Сумма для стейкинга (CBR)
                   </label>
                   <Input
+                    id="stake-amount-input"
                     type="number"
                     value={stakeAmount}
                     onChange={(e) => setStakeAmount(e.target.value)}
@@ -394,10 +398,14 @@ export default function Governance() {
               </div>
 
               <div>
-                <label className="font-jetbrains text-sm text-muted-foreground mb-2 block">
+                <label
+                  htmlFor="proposal-title-input"
+                  className="font-jetbrains text-sm text-muted-foreground mb-2 block"
+                >
                   Заголовок (макс. 100 символов)
                 </label>
                 <Input
+                  id="proposal-title-input"
                   value={proposalTitle}
                   onChange={(e) => setProposalTitle(e.target.value)}
                   placeholder="Введите заголовок предложения"
@@ -410,10 +418,14 @@ export default function Governance() {
               </div>
 
               <div>
-                <label className="font-jetbrains text-sm text-muted-foreground mb-2 block">
+                <label
+                  htmlFor="proposal-description-textarea"
+                  className="font-jetbrains text-sm text-muted-foreground mb-2 block"
+                >
                   Описание (макс. 1000 символов)
                 </label>
                 <Textarea
+                  id="proposal-description-textarea"
                   value={proposalDescription}
                   onChange={(e) => setProposalDescription(e.target.value)}
                   placeholder="Опишите ваше предложение подробно"

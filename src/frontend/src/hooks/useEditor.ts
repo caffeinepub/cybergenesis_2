@@ -111,13 +111,13 @@ function clearBadges(): void {
   const badges = document.querySelectorAll<HTMLElement>(
     '[data-editor-badge="1"]',
   );
-  badges.forEach((badge) => {
-    const parent = badge.parentElement as HTMLElement | null;
+  for (const badge of badges) {
+    const parent = (badge as HTMLElement).parentElement as HTMLElement | null;
     badge.remove();
     if (parent) {
       parent.classList.remove("editor-selected-badged");
     }
-  });
+  }
 }
 
 /**
@@ -223,9 +223,9 @@ export class EditCommunicator {
 
   #clearAllSelections(): void {
     const allElements = document.querySelectorAll(".editor-selected");
-    allElements.forEach((element) => {
+    for (const element of allElements) {
       element.classList.remove("editor-selected");
-    });
+    }
     this.#selectedElements.clear();
     clearBadges();
   }
@@ -274,7 +274,7 @@ export class EditCommunicator {
     ): HTMLElement => {
       const clonedParent = parent.cloneNode(false) as HTMLElement;
 
-      Array.from(parent.children).forEach((child) => {
+      for (const child of Array.from(parent.children)) {
         const childElement = child as HTMLElement;
 
         if (remainingPath.length > 0 && childElement === remainingPath[0]) {
@@ -292,7 +292,7 @@ export class EditCommunicator {
           this.#removeArtificialElements(clonedChild);
           clonedParent.appendChild(clonedChild);
         }
-      });
+      }
 
       this.#removeArtificialElements(clonedParent);
       return clonedParent;
@@ -304,7 +304,9 @@ export class EditCommunicator {
 
   #removeArtificialElements(element: HTMLElement): void {
     const badges = element.querySelectorAll('[data-editor-badge="1"]');
-    badges.forEach((badge) => badge.remove());
+    for (const badge of badges) {
+      badge.remove();
+    }
 
     element.classList.remove(
       "editor-selected",
@@ -381,9 +383,9 @@ export class EditCommunicator {
     const target = e.target as HTMLElement;
 
     const allElements = document.querySelectorAll(".editor-hover");
-    allElements.forEach((element) => {
+    for (const element of allElements) {
       element.classList.remove("editor-hover");
-    });
+    }
 
     target.classList.add("editor-hover");
   }
@@ -404,14 +406,14 @@ export class EditCommunicator {
     const matched: string[] = [];
 
     const elements = document.querySelectorAll<HTMLElement>("*");
-    elements.forEach((el) => {
+    for (const el of elements) {
       const domTreeString = this.#generateDOMTreeString(el);
       const id = hashDomTreeString(domTreeString);
       if (wanted.has(id)) {
         this.#addSelection(id, el, domTreeString);
         matched.push(id);
       }
-    });
+    }
 
     const selectedElements = Array.from(this.#selectedElements.values()).map(
       ({ id, domTreeString }) => ({

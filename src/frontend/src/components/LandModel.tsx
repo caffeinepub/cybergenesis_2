@@ -79,7 +79,7 @@ export default function LandModel({ modelUrl, biome }: LandModelProps) {
 
           let hasEmissiveMap = false;
 
-          materials.forEach((m: THREE.MeshStandardMaterial) => {
+          for (const m of materials as THREE.MeshStandardMaterial[]) {
             // Enable dithering for all land meshes
             m.dithering = true;
 
@@ -115,17 +115,17 @@ export default function LandModel({ modelUrl, biome }: LandModelProps) {
               m.roughnessMap,
             ];
 
-            textures.forEach((tex) => {
+            for (const tex of textures) {
               if (tex) {
                 tex.anisotropy = maxAnisotropy;
                 tex.needsUpdate = true;
               }
-            });
+            }
 
             console.log(
               `[LandModel] Anisotropy applied to textures: ${textures.filter((t) => t).length} textures updated`,
             );
-          });
+          }
 
           // Selective Layer Assignment:
           // Meshes with emissiveMap → Layer 1 (bloom target)
@@ -174,7 +174,7 @@ export default function LandModel({ modelUrl, biome }: LandModelProps) {
           ? child.material
           : [child.material];
 
-        materials.forEach((m: THREE.MeshStandardMaterial) => {
+        for (const m of materials as THREE.MeshStandardMaterial[]) {
           // Only apply pulse to materials with emissive map
           if (
             m.emissiveMap ||
@@ -185,7 +185,7 @@ export default function LandModel({ modelUrl, biome }: LandModelProps) {
               baseIntensity *
               (1.0 + Math.sin(state.clock.elapsedTime * 0.8) * 0.15);
           }
-        });
+        }
       }
     });
   });

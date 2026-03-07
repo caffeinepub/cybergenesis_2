@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   BookOpen,
   Compass,
-  Map,
+  Map as MapIcon,
   ShoppingCart,
   Trophy,
   Vote,
@@ -98,7 +98,7 @@ export default function Dashboard() {
     { id: "leaderboard" as TabType, icon: Trophy, label: "Рейтинг" },
     { id: "marketplace" as TabType, icon: ShoppingCart, label: "Рынок" },
     { id: "governance" as TabType, icon: Vote, label: "Управление" },
-    { id: "map" as TabType, icon: Map, label: "Карта" },
+    { id: "map" as TabType, icon: MapIcon, label: "Карта" },
   ];
 
   const handleMapClose = () => {
@@ -142,6 +142,7 @@ export default function Dashboard() {
                   const Icon = tab.icon;
                   return (
                     <button
+                      type="button"
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
                       className={`

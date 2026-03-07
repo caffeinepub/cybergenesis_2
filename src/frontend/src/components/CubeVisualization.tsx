@@ -355,6 +355,7 @@ function SelectiveBloomEffect() {
   // Initialize bloomTexture to prevent startup crashes
   const bloomTextureRef = useRef<THREE.Texture>(new THREE.Texture());
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     // ── Global renderer config ──
     gl.toneMapping = THREE.NoToneMapping;
@@ -577,6 +578,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
 
       {/* Glassmorphism fullscreen toggle button */}
       <button
+        type="button"
         onClick={toggleFullscreen}
         className="absolute bottom-4 right-4 z-50 opacity-0 group-hover:opacity-100 p-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl text-white transition-all hover:bg-black/60 active:scale-95"
         aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
@@ -593,6 +595,8 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
+            aria-label="Exit fullscreen"
+            role="img"
           >
             <path d="M8 3v3a2 2 0 0 1-2 2H3" />
             <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
@@ -610,6 +614,8 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
+            aria-label="Enter fullscreen"
+            role="img"
           >
             <path d="M15 3h6v6" />
             <path d="M9 21H3v-6" />

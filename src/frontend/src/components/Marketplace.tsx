@@ -81,7 +81,7 @@ export default function Marketplace() {
 
       return true;
     });
-  }, [listings, filterType, filterTier, minPrice, maxPrice]);
+  }, [listings, filterType, minPrice, maxPrice]);
 
   const handleBuyItem = async (listingId: bigint, price: bigint) => {
     setBuyingId(listingId);
@@ -237,7 +237,10 @@ export default function Marketplace() {
 
                 <TabsContent value="land" className="space-y-4">
                   <div>
-                    <label className="font-jetbrains text-sm text-muted-foreground mb-2 block">
+                    <label
+                      htmlFor="marketplace-land-select"
+                      className="font-jetbrains text-sm text-muted-foreground mb-2 block"
+                    >
                       Выберите землю
                     </label>
                     <Select
@@ -263,7 +266,10 @@ export default function Marketplace() {
 
                 <TabsContent value="modifier" className="space-y-4">
                   <div>
-                    <label className="font-jetbrains text-sm text-muted-foreground mb-2 block">
+                    <label
+                      htmlFor="marketplace-mod-select"
+                      className="font-jetbrains text-sm text-muted-foreground mb-2 block"
+                    >
                       Выберите модификатор
                     </label>
                     <Select
@@ -290,10 +296,14 @@ export default function Marketplace() {
               </Tabs>
 
               <div>
-                <label className="font-jetbrains text-sm text-muted-foreground mb-2 block">
+                <label
+                  htmlFor="marketplace-list-price-input"
+                  className="font-jetbrains text-sm text-muted-foreground mb-2 block"
+                >
                   Цена продажи (CBR)
                 </label>
                 <Input
+                  id="marketplace-list-price-input"
                   type="number"
                   value={listPrice}
                   onChange={(e) => setListPrice(e.target.value)}
@@ -337,7 +347,10 @@ export default function Marketplace() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="font-jetbrains text-sm text-muted-foreground mb-2 block">
+              <label
+                htmlFor="marketplace-filter-type"
+                className="font-jetbrains text-sm text-muted-foreground mb-2 block"
+              >
                 Тип предмета
               </label>
               <Select
@@ -358,7 +371,10 @@ export default function Marketplace() {
             </div>
 
             <div>
-              <label className="font-jetbrains text-sm text-muted-foreground mb-2 block">
+              <label
+                htmlFor="marketplace-filter-tier"
+                className="font-jetbrains text-sm text-muted-foreground mb-2 block"
+              >
                 Уровень редкости
               </label>
               <Select value={filterTier} onValueChange={setFilterTier}>
@@ -376,10 +392,14 @@ export default function Marketplace() {
             </div>
 
             <div>
-              <label className="font-jetbrains text-sm text-muted-foreground mb-2 block">
+              <label
+                htmlFor="marketplace-min-price-input"
+                className="font-jetbrains text-sm text-muted-foreground mb-2 block"
+              >
                 Мин. цена (CBR)
               </label>
               <Input
+                id="marketplace-min-price-input"
                 type="number"
                 value={minPrice}
                 onChange={(e) => setMinPrice(e.target.value)}
@@ -391,10 +411,14 @@ export default function Marketplace() {
             </div>
 
             <div>
-              <label className="font-jetbrains text-sm text-muted-foreground mb-2 block">
+              <label
+                htmlFor="marketplace-max-price-input"
+                className="font-jetbrains text-sm text-muted-foreground mb-2 block"
+              >
                 Макс. цена (CBR)
               </label>
               <Input
+                id="marketplace-max-price-input"
                 type="number"
                 value={maxPrice}
                 onChange={(e) => setMaxPrice(e.target.value)}
@@ -437,7 +461,7 @@ export default function Marketplace() {
 
             return (
               <Card
-                key={index}
+                key={listing.listingId?.toString() || index}
                 className={`glassmorphism border-primary/20 hover:border-primary/40 transition-all duration-300 ${
                   isOwner
                     ? "ring-2 ring-secondary/50 box-glow-magenta"

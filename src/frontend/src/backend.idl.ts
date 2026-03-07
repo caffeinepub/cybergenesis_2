@@ -9,8 +9,18 @@ export const idlFactory = ({
     guest: IDL.Null,
   });
   const UserProfile = IDL.Record({ name: IDL.Text });
-  const Coordinates = IDL.Record({ lat: IDL.Float64, lon: IDL.Float64 });
   const Time = IDL.Int;
+
+  const ModifierInstance = IDL.Record({
+    modifierInstanceId: IDL.Nat,
+    modifierType: IDL.Text,
+    rarity_tier: IDL.Nat,
+    multiplier_value: IDL.Float64,
+    model_url: IDL.Text,
+  });
+
+  const Coordinates = IDL.Record({ lat: IDL.Float64, lon: IDL.Float64 });
+
   const LandData = IDL.Record({
     decorationURL: IDL.Opt(IDL.Text),
     baseTokenMultiplier: IDL.Float64,
@@ -24,7 +34,9 @@ export const idlFactory = ({
     cycleCharge: IDL.Int,
     plotName: IDL.Text,
     coordinates: Coordinates,
+    attachedModifications: IDL.Vec(ModifierInstance),
   });
+
   const ClaimResult = IDL.Variant({
     success: IDL.Record({
       tokensClaimed: IDL.Nat,
@@ -41,6 +53,7 @@ export const idlFactory = ({
       current: IDL.Int,
     }),
   });
+
   const LootCache = IDL.Record({
     owner: IDL.Principal,
     tier: IDL.Nat,
@@ -48,6 +61,7 @@ export const idlFactory = ({
     discovered_at: Time,
     is_opened: IDL.Bool,
   });
+
   const DiscoverCacheResult = IDL.Variant({
     success: LootCache,
     insufficientTokens: IDL.Record({
@@ -60,6 +74,7 @@ export const idlFactory = ({
       current: IDL.Int,
     }),
   });
+
   const Modifier = IDL.Record({
     name: IDL.Text,
     asset_url: IDL.Text,
@@ -67,18 +82,21 @@ export const idlFactory = ({
     rarity_tier: IDL.Nat,
     multiplier_value: IDL.Float64,
   });
+
   const Modification = IDL.Record({
     model_url: IDL.Text,
     mod_id: IDL.Nat,
     rarity_tier: IDL.Nat,
     multiplier_value: IDL.Float64,
   });
+
   const TopLandEntry = IDL.Record({
     upgradeLevel: IDL.Nat,
     principal: IDL.Principal,
     tokenBalance: IDL.Nat,
     plotName: IDL.Text,
   });
+
   const UpgradeResult = IDL.Variant({
     maxLevelReached: IDL.Null,
     success: IDL.Record({
@@ -90,6 +108,7 @@ export const idlFactory = ({
       current: IDL.Nat,
     }),
   });
+
   const http_header = IDL.Record({
     value: IDL.Text,
     name: IDL.Text,
@@ -110,12 +129,14 @@ export const idlFactory = ({
   });
 
   return IDL.Service({
+    _initializeAccessControlWithSecret: IDL.Func([IDL.Text], [], []),
     adminGetLandData: IDL.Func(
       [IDL.Principal],
       [IDL.Opt(IDL.Vec(LandData))],
-      ["query"],
+      [],
     ),
     adminSetAllModifiers: IDL.Func([IDL.Vec(Modifier)], [], []),
+    applyModifier: IDL.Func([IDL.Nat, IDL.Nat], [], []),
     assignCallerUserRole: IDL.Func([IDL.Principal, UserRole], [], []),
     claimRewards: IDL.Func([IDL.Nat], [ClaimResult], []),
     discoverLootCache: IDL.Func([IDL.Nat], [DiscoverCacheResult], []),
@@ -146,7 +167,7 @@ export const idlFactory = ({
     initializeAccessControl: IDL.Func([], [], []),
     isCallerAdmin: IDL.Func([], [IDL.Bool], ["query"]),
     mintLand: IDL.Func([], [LandData], []),
-    processCache: IDL.Func([IDL.Nat], [LootCache], []),
+    processCache: IDL.Func([IDL.Nat], [ModifierInstance], []),
     saveCallerUserProfile: IDL.Func([UserProfile], [], []),
     setGovernanceCanister: IDL.Func([IDL.Principal], [], []),
     setMarketplaceCanister: IDL.Func([IDL.Principal], [], []),

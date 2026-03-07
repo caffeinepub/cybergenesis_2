@@ -81,6 +81,7 @@ const MapView: React.FC<MapViewProps> = ({ landData, onClose }) => {
   };
 
   // Main map initialization — re-runs only when SDK loads or lands data arrives
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (
       !maptalksSdkLoaded ||
@@ -135,7 +136,7 @@ const MapView: React.FC<MapViewProps> = ({ landData, onClose }) => {
       // Neon beam UIMarkers — 100% engine-rendered, zero React JSX
       const currentUserPrincipal = identity?.getPrincipal().toString();
 
-      lands.forEach((land) => {
+      for (const land of lands) {
         const isOwner = land.principal.toString() === currentUserPrincipal;
         const biomeColor = getBiomeColor(land.biome);
 
@@ -165,7 +166,7 @@ const MapView: React.FC<MapViewProps> = ({ landData, onClose }) => {
           horizontalAlignment: "middle",
           eventsPropagation: false,
         }).addTo(map);
-      });
+      }
 
       // 600ms delayed drone animation to target land
       const lon = landData.coordinates.lon;
@@ -252,6 +253,7 @@ const MapView: React.FC<MapViewProps> = ({ landData, onClose }) => {
 
       {/* Close Button */}
       <button
+        type="button"
         onClick={onClose}
         style={{
           position: "absolute",

@@ -361,7 +361,7 @@ export default function CanisterDiagnostics() {
             <div className="space-y-2">
               {report.gatewayResults.map((result, index) => (
                 <div
-                  key={index}
+                  key={result.gateway || index}
                   className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-gray-700/50"
                 >
                   <div className="flex items-center gap-3">
@@ -401,7 +401,7 @@ export default function CanisterDiagnostics() {
               <div className="space-y-2">
                 {report.recommendations.map((rec, index) => (
                   <div
-                    key={index}
+                    key={rec.slice(0, 20) || index}
                     className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 text-sm text-gray-300"
                   >
                     {rec}

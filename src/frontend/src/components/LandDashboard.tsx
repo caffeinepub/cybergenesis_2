@@ -240,6 +240,7 @@ export default function LandDashboard({
             <div className="space-y-2">
               <p className="text-red-400 font-jetbrains">Balance unavailable</p>
               <button
+                type="button"
                 onClick={handleDebugBalance}
                 disabled={debugBalanceMutation.isPending}
                 className="px-4 py-2 rounded-lg btn-gradient-green text-black font-orbitron disabled:opacity-50"
@@ -260,6 +261,7 @@ export default function LandDashboard({
                 {formatTokenBalance(tokenBalance || BigInt(0))} CBR
               </p>
               <button
+                type="button"
                 onClick={handleDebugBalance}
                 disabled={debugBalanceMutation.isPending}
                 className="px-3 py-1 rounded glassmorphism text-[#00ffff] hover:text-[#00ffff] hover:bg-[#00ffff]/10 transition-all duration-300 text-sm font-jetbrains border border-[#00ffff]/30"
@@ -367,6 +369,7 @@ export default function LandDashboard({
 
           <div className="flex gap-2 pt-2">
             <button
+              type="button"
               onClick={handleClaimRewards}
               disabled={claimRewardsMutation.isPending || isCooldownActive}
               className="flex-1 px-6 py-3 rounded-lg btn-gradient-green text-black font-bold font-orbitron disabled:opacity-50 disabled:cursor-not-allowed"
@@ -383,6 +386,7 @@ export default function LandDashboard({
               )}
             </button>
             <button
+              type="button"
               onClick={handleOpenMap}
               className="px-4 py-3 rounded-lg glassmorphism border border-[#00ffff]/30 text-[#00ffff] hover:bg-[#00ffff]/10 transition-all duration-300 box-glow-cyan"
             >
@@ -436,6 +440,7 @@ export default function LandDashboard({
                     </div>
                   </div>
                   <button
+                    type="button"
                     onClick={() =>
                       handleApplyModifier(modifier.modifierInstanceId)
                     }
@@ -481,6 +486,7 @@ export default function LandDashboard({
               </p>
             </div>
             <button
+              type="button"
               onClick={handleUpgradePlot}
               disabled={
                 upgradePlotMutation.isPending ||
@@ -529,6 +535,7 @@ export default function LandDashboard({
               </p>
             </div>
             <button
+              type="button"
               onClick={handleDebugCanisterBalance}
               disabled={debugCanisterBalanceMutation.isPending}
               className="w-full px-4 py-2 rounded-lg glassmorphism border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-all duration-300 font-orbitron disabled:opacity-50"

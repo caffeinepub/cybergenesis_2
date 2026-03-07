@@ -214,9 +214,9 @@ export function useAssetActor() {
     }
 
     if (validation.warnings.length > 0) {
-      validation.warnings.forEach((warning) => {
+      for (const warning of validation.warnings) {
         console.warn("[AssetCanister Actor]", warning);
-      });
+      }
     }
 
     const initActorWithRetry = async () => {

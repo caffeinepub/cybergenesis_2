@@ -47,6 +47,7 @@ export default function LandingPage() {
 
             <div className="pt-4">
               <button
+                type="button"
                 onClick={handleLogin}
                 disabled={isLoggingIn}
                 className={`

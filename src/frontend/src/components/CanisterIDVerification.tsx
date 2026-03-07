@@ -71,9 +71,9 @@ export function CanisterIDVerification() {
   ];
 
   // Check if IDs are correct
-  canisters.forEach((canister) => {
+  for (const canister of canisters) {
     canister.isCorrect = canister.currentId === canister.correctId;
-  });
+  }
 
   const allCorrect = canisters.every((c) => c.isCorrect);
   const hasErrors = canisters.some((c) => !c.isCorrect);

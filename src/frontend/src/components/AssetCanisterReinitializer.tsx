@@ -568,7 +568,7 @@ export default function AssetCanisterReinitializer() {
             </div>
             {steps.map((step, index) => (
               <div
-                key={index}
+                key={step.name || index}
                 className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-gray-700/50"
               >
                 <div className="flex items-center gap-3">

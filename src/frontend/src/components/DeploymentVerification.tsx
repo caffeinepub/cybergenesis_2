@@ -118,6 +118,7 @@ export function DeploymentVerification() {
     }
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     checkHealth(true);
     const interval = setInterval(() => checkHealth(true), 30000);

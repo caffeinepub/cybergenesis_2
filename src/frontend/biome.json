@@ -9,8 +9,7 @@
       "build/**",
       "*.config.js",
       "src/declarations/**",
-      "src/config.ts",
-      "src/hooks/useActor.ts"
+      "src/config.ts"
     ]
   },
   "formatter": {
@@ -24,26 +23,14 @@
       "recommended": true,
       "correctness": {
         "useHookAtTopLevel": "error",
-        "noUnusedVariables": "error",
-        "useExhaustiveDependencies": "off"
+        "noUnusedVariables": "error"
       },
       "suspicious": {
-        "noExplicitAny": "off",
-        "noArrayIndexKey": "off",
-        "noShadowRestrictedNames": "off"
+        "noExplicitAny": "off"
       },
       "style": {
         "useConst": "off",
         "noNonNullAssertion": "off"
-      },
-      "a11y": {
-        "noLabelWithoutControl": "off",
-        "useButtonType": "off",
-        "useAltText": "off",
-        "noSvgWithoutTitle": "off"
-      },
-      "complexity": {
-        "noForEach": "off"
       }
     }
   },

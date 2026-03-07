@@ -77,6 +77,7 @@ export default function NetworkDiagnostics() {
   };
 
   // Set up periodic health checks
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (!isReady) {
       setMetrics((prev) => ({
@@ -164,6 +165,7 @@ export default function NetworkDiagnostics() {
     <div className="bg-black/40 backdrop-blur-md border border-[#00d4ff]/30 rounded-lg shadow-[0_0_15px_rgba(0,212,255,0.3)] overflow-hidden">
       {/* Compact Header - Always Visible */}
       <button
+        type="button"
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/5 transition-colors"
       >
@@ -297,7 +299,7 @@ export default function NetworkDiagnostics() {
                     <span className="text-gray-500">Gateway Nodes:</span>
                     {envValidation.config.gateways.map((gateway, index) => (
                       <div
-                        key={index}
+                        key={gateway || index}
                         className="flex items-center space-x-2 pl-2"
                       >
                         <span className="text-[#00d4ff]/50">•</span>
@@ -316,7 +318,10 @@ export default function NetworkDiagnostics() {
               {!envValidation.isValid && (
                 <div className="space-y-1">
                   {envValidation.errors.map((error, index) => (
-                    <p key={index} className="text-xs text-red-400">
+                    <p
+                      key={error.slice(0, 20) || index}
+                      className="text-xs text-red-400"
+                    >
                       • {error}
                     </p>
                   ))}
@@ -343,6 +348,7 @@ export default function NetworkDiagnostics() {
 
           {/* Manual Refresh Button */}
           <button
+            type="button"
             onClick={updateMetrics}
             disabled={!isReady}
             className="w-full px-4 py-2 bg-[#00d4ff]/20 hover:bg-[#00d4ff]/30 border border-[#00d4ff]/50 rounded text-[#00d4ff] text-xs font-bold tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

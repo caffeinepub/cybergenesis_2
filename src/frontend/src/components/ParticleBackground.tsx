@@ -51,7 +51,7 @@ export default function ParticleBackground() {
       ctx.fillStyle = "rgba(10, 10, 30, 0.1)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      particles.forEach((particle) => {
+      for (const particle of particles) {
         particle.x += particle.vx;
         particle.y += particle.vy;
 
@@ -65,10 +65,11 @@ export default function ParticleBackground() {
 
         ctx.shadowBlur = 10;
         ctx.shadowColor = particle.color;
-      });
+      }
 
-      particles.forEach((p1, i) => {
-        particles.slice(i + 1).forEach((p2) => {
+      for (let i = 0; i < particles.length; i++) {
+        const p1 = particles[i];
+        for (const p2 of particles.slice(i + 1)) {
           const dx = p1.x - p2.x;
           const dy = p1.y - p2.y;
           const distance = Math.sqrt(dx * dx + dy * dy);
@@ -81,8 +82,8 @@ export default function ParticleBackground() {
             ctx.lineWidth = 0.5;
             ctx.stroke();
           }
-        });
-      });
+        }
+      }
 
       animationFrameRef.current = requestAnimationFrame(animate);
     };

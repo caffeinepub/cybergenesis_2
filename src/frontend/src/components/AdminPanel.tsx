@@ -70,6 +70,7 @@ export default function AdminPanel() {
   };
 
   // Initial health check with 2-second delay
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const initialTimer = setTimeout(() => {
       checkAssetCanisterHealth();
@@ -79,6 +80,7 @@ export default function AdminPanel() {
   }, []);
 
   // Periodic health check every 30 seconds
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const interval = setInterval(() => {
       checkAssetCanisterHealth();
@@ -202,6 +204,7 @@ export default function AdminPanel() {
             <div className="text-sm font-mono">{getStatusText()}</div>
           </div>
           <button
+            type="button"
             onClick={() => setIsExpanded(!isExpanded)}
             className="text-cyan-400 hover:text-cyan-300 transition-colors"
           >
@@ -218,10 +221,14 @@ export default function AdminPanel() {
 
             {/* Land Type Selector */}
             <div>
-              <label className="block text-xs text-gray-400 mb-2">
+              <label
+                htmlFor="land-type-select"
+                className="block text-xs text-gray-400 mb-2"
+              >
                 Тип земли:
               </label>
               <select
+                id="land-type-select"
                 value={selectedLandType}
                 onChange={(e) => setSelectedLandType(e.target.value)}
                 className="w-full px-3 py-2 bg-gray-900 border border-cyan-500/50 rounded text-cyan-300 text-sm focus:outline-none focus:border-cyan-400"
@@ -236,7 +243,10 @@ export default function AdminPanel() {
 
             {/* File Input */}
             <div>
-              <label className="block text-xs text-gray-400 mb-2">
+              <label
+                htmlFor="glb-file-input"
+                className="block text-xs text-gray-400 mb-2"
+              >
                 Файл GLB:
               </label>
               <input

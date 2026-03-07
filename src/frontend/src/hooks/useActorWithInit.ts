@@ -126,6 +126,7 @@ export function useActorWithInit(): UseActorReturn {
     }
   }, [isFetching, actor, identity]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const initializeActor = async () => {
       // Reset if identity changed
