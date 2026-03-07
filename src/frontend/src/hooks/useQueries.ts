@@ -115,7 +115,7 @@ type BuyResult =
       cannotBuyOwnListing: null;
     };
 
-// Land Data Query — fetches all lands by iterating top lands
+// Land Data Query
 export function useGetLandData() {
   const { actor, isFetching } = useActor();
 
@@ -124,13 +124,9 @@ export function useGetLandData() {
     queryFn: async () => {
       if (!actor) return [];
       console.log("Fetching land data...");
-      const topEntries = await actor.getTopLands(BigInt(1000));
-      const results = await Promise.all(
-        topEntries.map((entry) => actor.getLandData(entry.landId)),
-      );
-      const lands = results.filter((r): r is LandData => r !== null);
-      console.log("Land data fetched:", lands);
-      return lands;
+      const result = await actor.getLandData();
+      console.log("Land data fetched:", result);
+      return result;
     },
     enabled: !!actor && !isFetching,
     retry: 3,
@@ -368,10 +364,10 @@ export function useUpgradePlot() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ landId }: { landId: bigint; cost?: bigint }) => {
+    mutationFn: async ({ landId, cost }: { landId: bigint; cost: bigint }) => {
       if (!actor) throw new Error("Actor not available");
-      console.log("Upgrading plot:", landId);
-      const result = await actor.upgradePlot(landId);
+      console.log("Upgrading plot:", landId, "Cost:", cost);
+      const result = await actor.upgradePlot(landId, cost);
       console.log("Upgrade result:", result);
       return result;
     },

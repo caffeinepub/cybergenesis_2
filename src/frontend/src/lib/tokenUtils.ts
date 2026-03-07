@@ -4,6 +4,7 @@
  */
 
 const CBR_DECIMALS = 8;
+const _CBR_DECIMAL_MULTIPLIER = 10n ** BigInt(CBR_DECIMALS);
 
 /**
  * Formats a raw token balance (in base units/e8s) to a human-readable decimal string
