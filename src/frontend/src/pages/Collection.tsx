@@ -159,9 +159,8 @@ export default function Collection() {
 
       {/* Image Modal 500x500 */}
       {selectedImage && (
-        <dialog
-          open
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm border-0 p-0 max-w-none w-full h-full"
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
           onClick={() => setSelectedImage(null)}
           onKeyDown={(e) => e.key === "Escape" && setSelectedImage(null)}
           aria-label="Image viewer"
@@ -187,7 +186,7 @@ export default function Collection() {
               style={{ width: 500, height: 500 }}
             />
           </div>
-        </dialog>
+        </div>
       )}
     </div>
   );

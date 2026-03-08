@@ -1,6 +1,7 @@
 import type { LandData, ModifierInstance } from "@/backend";
 import PlotCustomization from "@/components/PlotCustomization";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PLANNED_MODIFIER_CATALOG } from "@/data/modifierCatalog";
 import {
   useApplyModifier,
   useClaimRewards,
@@ -245,7 +246,7 @@ export default function LandDashboard({
     window.open(url, "_blank");
   };
 
-  if (landsLoading) {
+  if (landsLoading || balanceLoading || inventoryLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="w-8 h-8 animate-spin text-[#00ffff] drop-shadow-[0_0_10px_rgba(0,255,255,0.8)]" />
@@ -254,6 +255,14 @@ export default function LandDashboard({
   }
 
   if (!selectedLand) {
+    // lands loaded but this index doesn't exist yet -- keep showing loader briefly
+    if (!lands || lands.length === 0) {
+      return (
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="w-8 h-8 animate-spin text-[#00ffff] drop-shadow-[0_0_10px_rgba(0,255,255,0.8)]" />
+        </div>
+      );
+    }
     return (
       <div className="text-center py-12">
         <p className="text-white/70 font-jetbrains">Land not found</p>
@@ -507,46 +516,70 @@ export default function LandDashboard({
             </p>
           ) : (
             <div className="space-y-3">
-              {modifierInventory.map((modifier) => (
-                <div
-                  key={modifier.modifierInstanceId.toString()}
-                  className="glassmorphism rounded-lg p-4 border border-[#9933ff]/30 hover:border-[#9933ff]/50 transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="text-white font-medium font-jetbrains">
-                        {modifier.modifierType}
-                      </p>
-                      <p className="text-white/50 text-sm font-jetbrains">
-                        Tier {modifier.rarity_tier.toString()} • Multiplier:{" "}
-                        {modifier.multiplier_value}x
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[#9933ff] text-xs font-jetbrains">
-                        ID: {modifier.modifierInstanceId.toString()}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleApplyModifier(modifier.modifierInstanceId)
-                    }
-                    disabled={applyModifierMutation.isPending || !selectedLand}
-                    className="w-full px-4 py-2 rounded-lg btn-gradient-purple text-white font-bold font-orbitron disabled:opacity-50"
+              {modifierInventory.map((modifier) => {
+                const normalized = modifier.modifierType
+                  .toLowerCase()
+                  .replace(/_/g, " ")
+                  .replace(/\b\w/g, (c) => c.toUpperCase());
+                const catalogEntry = PLANNED_MODIFIER_CATALOG.find(
+                  (m) => m.name.toLowerCase() === normalized.toLowerCase(),
+                );
+                const assetUrl =
+                  catalogEntry?.asset_url ??
+                  PLANNED_MODIFIER_CATALOG[0]?.asset_url ??
+                  "";
+                return (
+                  <div
+                    key={modifier.modifierInstanceId.toString()}
+                    className="glassmorphism rounded-lg p-4 border border-[#9933ff]/30 hover:border-[#9933ff]/50 transition-colors"
                   >
-                    {applyModifierMutation.isPending ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                        Applying...
-                      </>
-                    ) : (
-                      "APPLY TO LAND"
-                    )}
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 flex-shrink-0 rounded-lg overflow-hidden bg-black/30 flex items-center justify-center">
+                        {assetUrl ? (
+                          <img
+                            src={assetUrl}
+                            alt={modifier.modifierType}
+                            className="w-9 h-9 object-contain"
+                          />
+                        ) : null}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-medium font-jetbrains">
+                          {modifier.modifierType}
+                        </p>
+                        <p className="text-white/50 text-sm font-jetbrains">
+                          Tier {modifier.rarity_tier.toString()} • Multiplier:{" "}
+                          {modifier.multiplier_value}x
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-[#9933ff] text-xs font-jetbrains">
+                          ID: {modifier.modifierInstanceId.toString()}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleApplyModifier(modifier.modifierInstanceId)
+                      }
+                      disabled={
+                        applyModifierMutation.isPending || !selectedLand
+                      }
+                      className="w-full px-4 py-2 rounded-lg btn-gradient-purple text-white font-bold font-orbitron disabled:opacity-50"
+                    >
+                      {applyModifierMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
+                          Applying...
+                        </>
+                      ) : (
+                        "APPLY TO LAND"
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>

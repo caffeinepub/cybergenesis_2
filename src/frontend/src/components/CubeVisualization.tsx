@@ -325,14 +325,6 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
-  if (!modelUrl) {
-    return (
-      <div className="w-full h-full flex items-center justify-center text-cyan-400">
-        3D model unavailable
-      </div>
-    );
-  }
-
   return (
     <div ref={containerRef} className="relative w-full h-full group">
       <Canvas
@@ -354,7 +346,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           <SceneSetup />
           <CameraLayerSetup />
           <BackgroundSphere />
-          <LandModel modelUrl={modelUrl} biome={biome} />
+          {modelUrl && <LandModel modelUrl={modelUrl} biome={biome} />}
           <Environment
             files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/artist_workshop_1k.hdr"
             environmentIntensity={1.0}

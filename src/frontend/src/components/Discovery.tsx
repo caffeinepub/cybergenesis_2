@@ -1,6 +1,7 @@
 import type { LootCache, Result_1, Result_3 } from "@/backend";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PLANNED_MODIFIER_CATALOG } from "@/data/modifierCatalog";
 import { useActor } from "@/hooks/useActor";
 import {
   useDebugTokenBalance,
@@ -15,6 +16,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Clock, Gift, Loader2, Package, Sparkles, Zap } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
+
+// Normalize modifier type name to match catalog (e.g. "ENERGY_BOOST" -> "Energy Boost")
+function getModifierAssetUrl(modifierType: string): string {
+  const normalized = modifierType
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+  const found = PLANNED_MODIFIER_CATALOG.find(
+    (m) => m.name.toLowerCase() === normalized.toLowerCase(),
+  );
+  return found?.asset_url ?? PLANNED_MODIFIER_CATALOG[0]?.asset_url ?? "";
+}
 
 export default function Discovery() {
   const { actor } = useActor();
@@ -462,20 +475,31 @@ export default function Discovery() {
                 const colorClass =
                   tierColors[entry.rarityTier] ??
                   "text-white border-white/20 bg-white/5";
+                const assetUrl = getModifierAssetUrl(entry.modifierType);
                 return (
                   <div
                     key={entry.id}
                     className={`rounded-lg p-3 border ${colorClass} flex items-center justify-between`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="text-2xl">
-                        {entry.rarityTier === 4
-                          ? "🌟"
-                          : entry.rarityTier === 3
-                            ? "💎"
-                            : entry.rarityTier === 2
-                              ? "🔵"
-                              : "⚪"}
+                      <div className="w-10 h-10 flex-shrink-0 rounded-lg overflow-hidden bg-black/30 flex items-center justify-center">
+                        {assetUrl ? (
+                          <img
+                            src={assetUrl}
+                            alt={entry.modifierType}
+                            className="w-9 h-9 object-contain"
+                          />
+                        ) : (
+                          <span className="text-xl">
+                            {entry.rarityTier === 4
+                              ? "🌟"
+                              : entry.rarityTier === 3
+                                ? "💎"
+                                : entry.rarityTier === 2
+                                  ? "🔵"
+                                  : "⚪"}
+                          </span>
+                        )}
                       </div>
                       <div>
                         <p className="text-white font-medium font-jetbrains text-sm">
