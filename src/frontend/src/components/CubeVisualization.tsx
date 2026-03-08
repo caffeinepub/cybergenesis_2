@@ -27,71 +27,43 @@ const BIOME_MODEL_MAP: Record<string, string> = {
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_VOID.glb",
   MYTHIC_AETHER:
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_AETHER.glb",
-  // Aliases for short backend biome names
-  Forest:
-    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/FOREST_VALLEY_KTX2.glb",
-  Desert:
-    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/DESERT_DUNE.glb",
-  Ocean:
-    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/ISLAND_ARCHIPELAGO.glb",
-  Mountain:
-    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/SNOW_PEAK.glb",
-  Tundra:
-    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/SNOW_PEAK.glb",
-  Volcano:
-    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/VOLCANIC_CRAG.glb",
 };
 
-// ── Integrated Composite Shader: ACES + Sharpening + Glints ──
-const COMPOSITE_SHADER_FRAGMENT = `
-  uniform sampler2D baseTexture;
-  uniform sampler2D bloomTexture;
-  uniform vec2 resolution;
-  varying vec2 vUv;
+// Composite shader: blends bloom render target onto the final scene
+const COMPOSITE_SHADER = {
+  uniforms: {
+    baseTexture: { value: null as THREE.Texture | null },
+    bloomTexture: { value: null as THREE.Texture | null },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D baseTexture;
+    uniform sampler2D bloomTexture;
+    varying vec2 vUv;
+    void main() {
+      gl_FragColor = texture2D(baseTexture, vUv) + vec4(1.0) * texture2D(bloomTexture, vUv);
+    }
+  `,
+};
 
-  float luminance(vec3 v) { return dot(v, vec3(0.2126, 0.7152, 0.0722)); }
+// Camera layer setup: enable both Layer 0 (default) and Layer 1 (bloom targets)
+function CameraLayerSetup() {
+  const { camera } = useThree();
 
-  vec3 toneMapACES(vec3 x) {
-    const float a = 2.51;
-    const float b = 0.03;
-    const float c = 2.43;
-    const float d = 0.59;
-    const float e = 0.14;
-    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
-  }
+  useEffect(() => {
+    camera.layers.enable(0);
+    camera.layers.enable(1);
+    console.log("[CameraLayerSetup] Camera now sees Layer 0 and Layer 1");
+  }, [camera]);
 
-  void main() {
-    float sharpness = 0.15;
-    // CRITICAL: NaN protection against (0,0) resolution
-    vec2 texel = 1.0 / max(resolution, vec2(1.0));
-
-    vec3 center = texture2D(baseTexture, vUv).rgb;
-    vec3 left   = texture2D(baseTexture, vUv - vec2(texel.x, 0.0)).rgb;
-    vec3 right  = texture2D(baseTexture, vUv + vec2(texel.x, 0.0)).rgb;
-    vec3 up     = texture2D(baseTexture, vUv - vec2(0.0, texel.y)).rgb;
-    vec3 down   = texture2D(baseTexture, vUv + vec2(0.0, texel.y)).rgb;
-
-    vec3 baseRGB = center + sharpness * (4.0 * center - left - right - up - down);
-    vec3 bloomRGB = texture2D(bloomTexture, vUv).rgb;
-
-    float glintThreshold = 2.5;
-    float glintStrength = 3.0;
-    float highlight = max(0.0, luminance(baseRGB) - glintThreshold) * glintStrength;
-    vec3 finalBloom = bloomRGB + (baseRGB * highlight);
-
-    vec3 color = baseRGB + finalBloom;
-    vec3 mapped = toneMapACES(color);
-    gl_FragColor = vec4(mapped, 1.0);
-  }
-`;
-
-const COMPOSITE_SHADER_VERTEX = `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
+  return null;
+}
 
 // Camera-linked directional key light
 function KeyLightSync() {
@@ -117,8 +89,8 @@ function KeyLightSync() {
   );
 }
 
-// Full FBM Shader background — Layer 0, renderOrder -1000
-const _BackgroundSphere = () => {
+// Full FBM Shader with 4-color neon palette
+const BackgroundSphere = () => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
   const vertexShader = `
@@ -165,9 +137,8 @@ const _BackgroundSphere = () => {
     }
 
     void main() {
-        // CRITICAL: NaN-safe resolution normalization
-        vec2 p = (gl_FragCoord.xy * 2.0 - resolution.xy) / min(max(resolution.x, 1.0), max(resolution.y, 1.0));
-
+        vec2 p = (gl_FragCoord.xy * 2.0 - resolution.xy) / min(resolution.x, resolution.y);
+        
         vec3 c1 = vec3(0.2, 0.4, 0.9);
         vec3 c2 = vec3(1.0, 0.1, 0.6);
         vec3 c3 = vec3(0.3, 0.0, 0.5);
@@ -180,12 +151,12 @@ const _BackgroundSphere = () => {
 
         vec3 color = mix(c1, c2, clamp(f * 1.2, 0.0, 1.0));
         color = mix(color, c3, clamp(length(q) * 1.1, 0.0, 1.0));
-
+        
         float blackMask = smoothstep(0.2, 0.8, length(r.x) * 0.7);
         color = mix(color, c4, blackMask);
 
         color = (f * f * f * 1.5 + 0.5 * f) * color;
-
+        
         gl_FragColor = vec4(pow(color, vec3(2.0)) * 5.0, 1.0);
     }
   `;
@@ -210,123 +181,7 @@ const _BackgroundSphere = () => {
   });
 
   return (
-    <mesh frustumCulled={false} renderOrder={-1000} layers={new THREE.Layers()}>
-      <planeGeometry args={[2, 2]} />
-      <shaderMaterial
-        ref={materialRef}
-        vertexShader={vertexShader}
-        fragmentShader={fragmentShader}
-        uniforms={uniforms}
-        depthTest={false}
-        depthWrite={false}
-        transparent={false}
-      />
-    </mesh>
-  );
-};
-
-// Assign BackgroundSphere mesh to layer 0 explicitly via ref
-const BackgroundSphereWithLayer = () => {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const materialRef = useRef<THREE.ShaderMaterial>(null);
-
-  const vertexShader = `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = vec4(position.xy, 1.0, 1.0);
-    }
-  `;
-
-  const fragmentShader = `
-    uniform float time;
-    uniform vec2 resolution;
-
-    #define NUM_OCTAVES 6
-
-    float random(vec2 pos) {
-        return fract(sin(dot(pos.xy, vec2(13.9898, 78.233))) * 43758.5453123);
-    }
-
-    float noise(vec2 pos) {
-        vec2 i = floor(pos);
-        vec2 f = fract(pos);
-        float a = random(i + vec2(0.0, 0.0));
-        float b = random(i + vec2(1.0, 0.0));
-        float c = random(i + vec2(0.0, 1.0));
-        float d = random(i + vec2(1.0, 1.0));
-        vec2 u = f * f * (3.0 - 2.0 * f);
-        return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
-    }
-
-    float fbm(vec2 pos) {
-        float v = 0.0;
-        float a = 0.5;
-        vec2 shift = vec2(100.0);
-        mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
-        for (int i = 0; i < NUM_OCTAVES; i++) {
-            float dir = mod(float(i), 2.0) > 0.5 ? 1.0 : -1.0;
-            v += a * noise(pos - 0.05 * dir * time * 0.2);
-            pos = rot * pos * 2.0 + shift;
-            a *= 0.5;
-        }
-        return v;
-    }
-
-    void main() {
-        // CRITICAL: NaN-safe resolution normalization
-        vec2 p = (gl_FragCoord.xy * 2.0 - resolution.xy) / min(max(resolution.x, 1.0), max(resolution.y, 1.0));
-
-        vec3 c1 = vec3(0.2, 0.4, 0.9);
-        vec3 c2 = vec3(1.0, 0.1, 0.6);
-        vec3 c3 = vec3(0.3, 0.0, 0.5);
-        vec3 c4 = vec3(0.0, 0.0, 0.02);
-
-        float time2 = time * 0.2;
-        vec2 q = vec2(fbm(p + 0.0 * time2), fbm(p + vec2(1.0)));
-        vec2 r = vec2(fbm(p + q + vec2(1.7, 1.2) + 0.15 * time2), fbm(p + q + vec2(8.3, 2.8) + 0.126 * time2));
-        float f = fbm(p + r);
-
-        vec3 color = mix(c1, c2, clamp(f * 1.2, 0.0, 1.0));
-        color = mix(color, c3, clamp(length(q) * 1.1, 0.0, 1.0));
-
-        float blackMask = smoothstep(0.2, 0.8, length(r.x) * 0.7);
-        color = mix(color, c4, blackMask);
-
-        color = (f * f * f * 1.5 + 0.5 * f) * color;
-
-        gl_FragColor = vec4(pow(color, vec3(2.0)) * 5.0, 1.0);
-    }
-  `;
-
-  const uniforms = useMemo(
-    () => ({
-      time: { value: 0 },
-      resolution: { value: new THREE.Vector2(1, 1) },
-    }),
-    [],
-  );
-
-  useEffect(() => {
-    if (meshRef.current) {
-      // Assign strictly to layer 0 only — not visible during bloom (layer 1) pass
-      meshRef.current.layers.set(0);
-    }
-  }, []);
-
-  useFrame((state) => {
-    if (materialRef.current) {
-      materialRef.current.uniforms.time.value = state.clock.getElapsedTime();
-      const canvas = state.gl.domElement;
-      materialRef.current.uniforms.resolution.value.set(
-        canvas.width,
-        canvas.height,
-      );
-    }
-  });
-
-  return (
-    <mesh ref={meshRef} frustumCulled={false} renderOrder={-1000}>
+    <mesh frustumCulled={false} renderOrder={-1000}>
       <planeGeometry args={[2, 2]} />
       <shaderMaterial
         ref={materialRef}
@@ -352,133 +207,88 @@ function SceneSetup() {
   return null;
 }
 
-/**
- * Integrated Render Pipeline:
- * 1. bloomComposer renders ONLY Layer 1 (emissive meshes) → off-screen target
- * 2. finalComposer renders full scene (Layer 0 + 1) + ACES + Sharpening + Glints composite
- *
- * NO HueSaturationPass. CompositePass is the final pass.
- */
 function SelectiveBloomEffect() {
-  const { gl, scene, camera, size, viewport } = useThree();
+  const { gl, scene, camera, size } = useThree();
 
   const bloomComposerRef = useRef<EffectComposer | null>(null);
   const finalComposerRef = useRef<EffectComposer | null>(null);
-  const compositePassRef = useRef<ShaderPass | null>(null);
-  // Initialize bloomTexture to prevent startup crashes
-  const bloomTextureRef = useRef<THREE.Texture>(new THREE.Texture());
+  const bloomPassRef = useRef<UnrealBloomPass | null>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  // biome-ignore lint/correctness/useExhaustiveDependencies: size used only for initial composer setup, resize handled separately
   useEffect(() => {
-    // ── Global renderer config ──
-    gl.toneMapping = THREE.NoToneMapping;
-    gl.autoClear = false;
-    gl.setClearColor(0x000000, 1.0);
-    gl.setClearAlpha(1.0);
-    // DO NOT change gl.outputColorSpace — leave at default SRGBColorSpace
+    gl.setClearAlpha(1);
 
-    // ── Bloom Composer (Layer 1 only, renders to off-screen target) ──
     const bloomComposer = new EffectComposer(gl);
-    bloomComposer.renderToScreen = false; // REQUIRED: must NOT render to screen
+    bloomComposer.renderToScreen = false;
     bloomComposerRef.current = bloomComposer;
 
     const bloomRenderPass = new RenderPass(scene, camera);
     bloomComposer.addPass(bloomRenderPass);
 
-    // Bloom settings: intensity=0.8, radius=0.65, threshold=0.1
     const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(size.width, size.height),
-      0.8, // intensity
-      0.65, // radius
+      new THREE.Vector2(size.width / 2, size.height / 2),
+      0.15, // intensity
+      0.5, // radius
       0.1, // luminanceThreshold
     );
-    if ("luminanceSmoothing" in bloomPass) {
-      (bloomPass as any).luminanceSmoothing = 0.1;
-    }
+    bloomPassRef.current = bloomPass;
     bloomComposer.addPass(bloomPass);
 
-    // Initialize bloomTexture ref from the composer's render target
-    bloomTextureRef.current = bloomComposer.readBuffer.texture;
-
-    // ── Final Composer (full scene + ACES + Sharpening + Glints) ──
     const finalComposer = new EffectComposer(gl);
-    finalComposer.renderToScreen = true; // REQUIRED: renders to screen
+    finalComposer.renderToScreen = true;
     finalComposerRef.current = finalComposer;
 
     const finalRenderPass = new RenderPass(scene, camera);
     finalComposer.addPass(finalRenderPass);
 
-    // Composite pass: ACES + Sharpening + Glints + Bloom merge
     const compositePass = new ShaderPass(
       new THREE.ShaderMaterial({
         uniforms: {
           baseTexture: { value: null },
-          bloomTexture: { value: bloomTextureRef.current },
-          resolution: { value: new THREE.Vector2(size.width, size.height) },
+          bloomTexture: { value: bloomComposer.renderTarget2.texture },
         },
-        vertexShader: COMPOSITE_SHADER_VERTEX,
-        fragmentShader: COMPOSITE_SHADER_FRAGMENT,
+        vertexShader: COMPOSITE_SHADER.vertexShader,
+        fragmentShader: COMPOSITE_SHADER.fragmentShader,
         defines: {},
       }),
       "baseTexture",
     );
     compositePass.needsSwap = true;
-    compositePassRef.current = compositePass;
-
-    // CompositePass MUST be the final pass in finalComposer — NO HueSaturationPass after this
     finalComposer.addPass(compositePass);
 
-    return () => {
-      bloomComposerRef.current?.dispose();
-      bloomComposerRef.current = null;
-      finalComposerRef.current?.dispose();
-      finalComposerRef.current = null;
-      compositePassRef.current = null;
-    };
-  }, [gl, scene, camera]); // eslint-disable-line react-hooks/exhaustive-deps
+    // HueSaturation pass
+    const hueSaturationPass = new ShaderPass(
+      new THREE.ShaderMaterial({
+        uniforms: {
+          tDiffuse: { value: null },
+          hue: { value: 0.0 },
+          saturation: { value: 0.1 },
+        },
+        vertexShader: "...",
+        fragmentShader: "...",
+      }),
+    );
+    finalComposer.addPass(hueSaturationPass);
 
-  // Handle resize
+    return () => {
+      bloomPassRef.current?.dispose();
+      bloomComposerRef.current?.dispose();
+      finalComposerRef.current?.dispose();
+    };
+  }, [gl, scene, camera]);
+
   useEffect(() => {
-    if (bloomComposerRef.current) {
-      bloomComposerRef.current.setSize(size.width, size.height);
-    }
-    if (finalComposerRef.current) {
-      finalComposerRef.current.setSize(size.width, size.height);
-    }
+    bloomComposerRef.current?.setSize(size.width, size.height);
+    finalComposerRef.current?.setSize(size.width, size.height);
+    bloomPassRef.current?.resolution.set(size.width / 2, size.height / 2);
   }, [size]);
 
-  useFrame(({ gl: renderer }) => {
+  useFrame(() => {
     if (!bloomComposerRef.current || !finalComposerRef.current) return;
-
-    const sz = size;
-
-    // Guard: do not render when canvas has zero dimensions
-    if (sz.width <= 0 || sz.height <= 0) return;
-
-    // Manual clear of all buffers
-    renderer.clear(true, true, true);
-
-    // STEP 1: Bloom pass — render only Layer 1 (emissive meshes)
     camera.layers.set(1);
     bloomComposerRef.current.render();
-
-    // STEP 2: Final pass — render Layer 0 + Layer 1 (full scene)
-    camera.layers.set(0);
+    camera.layers.enable(0);
     camera.layers.enable(1);
-
-    // Update composite pass uniforms
-    if (compositePassRef.current) {
-      const mat = compositePassRef.current.material as THREE.ShaderMaterial;
-      // Update resolution in pixel units accounting for DPR
-      mat.uniforms.resolution.value.set(
-        sz.width * viewport.dpr,
-        sz.height * viewport.dpr,
-      );
-      // Use readBuffer.texture for stability
-      mat.uniforms.bloomTexture.value =
-        bloomComposerRef.current.readBuffer.texture;
-    }
-
     finalComposerRef.current.render();
   }, 1);
 
@@ -488,8 +298,7 @@ function SelectiveBloomEffect() {
 export default function CubeVisualization({ biome }: CubeVisualizationProps) {
   const modelUrl = useMemo(() => {
     if (!biome) return null;
-    const url = BIOME_MODEL_MAP[biome];
-    return url || null;
+    return BIOME_MODEL_MAP[biome] || null;
   }, [biome]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -509,13 +318,11 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
   };
 
   useEffect(() => {
-    const handleFullscreenChange = () => {
+    const handleFullscreenChange = () =>
       setIsFullscreen(!!document.fullscreenElement);
-    };
     document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => {
+    return () =>
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
-    };
   }, []);
 
   if (!modelUrl) {
@@ -535,18 +342,18 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           antialias: true,
           powerPreference: "high-performance",
           alpha: false,
-          ...({ dithering: true } as any),
         }}
         onCreated={({ gl }) => {
-          gl.toneMapping = THREE.NoToneMapping;
-          gl.autoClear = false;
-          gl.setClearColor(0x000000, 1.0);
-          gl.setClearAlpha(1.0);
+          gl.toneMapping = THREE.AgXToneMapping;
+          gl.outputColorSpace = THREE.SRGBColorSpace;
+          gl.toneMappingExposure = 1.2;
+          gl.setClearAlpha(1);
         }}
       >
-        <Suspense fallback={<color attach="background" args={["#000000"]} />}>
+        <Suspense fallback={null}>
           <SceneSetup />
-          <BackgroundSphereWithLayer />
+          <CameraLayerSetup />
+          <BackgroundSphere />
           <LandModel modelUrl={modelUrl} biome={biome} />
           <Environment
             files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/artist_workshop_1k.hdr"

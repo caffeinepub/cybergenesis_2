@@ -1,12 +1,18 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Sparkles, Star } from "lucide-react";
+import { Sparkles, Star, X } from "lucide-react";
+import { useState } from "react";
 import {
   PLANNED_MODIFIER_CATALOG,
   type PlannedModifier,
 } from "../data/modifierCatalog";
 
 export default function Collection() {
+  const [selectedImage, setSelectedImage] = useState<{
+    src: string;
+    name: string;
+  } | null>(null);
+
   const _getTierName = (tier: number): string => {
     switch (tier) {
       case 1:
@@ -144,11 +150,45 @@ export default function Collection() {
                 key={modifier.id}
                 modifier={modifier}
                 index={index}
+                onImageClick={(src, name) => setSelectedImage({ src, name })}
               />
             ))}
           </div>
         </CardContent>
       </Card>
+
+      {/* Image Modal 500x500 */}
+      {selectedImage && (
+        <dialog
+          open
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm border-0 p-0 max-w-none w-full h-full"
+          onClick={() => setSelectedImage(null)}
+          onKeyDown={(e) => e.key === "Escape" && setSelectedImage(null)}
+          aria-label="Image viewer"
+        >
+          <div
+            className="relative glassmorphism border border-primary/40 rounded-xl p-4 shadow-[0_0_40px_rgba(0,243,255,0.3)]"
+            style={{ width: 540, height: 540 }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedImage(null)}
+              className="absolute top-3 right-3 text-white/60 hover:text-white transition-colors z-10"
+              data-ocid="collection.image_modal.close_button"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img
+              src={selectedImage.src}
+              alt={selectedImage.name}
+              className="w-full h-full object-contain rounded-lg"
+              style={{ width: 500, height: 500 }}
+            />
+          </div>
+        </dialog>
+      )}
     </div>
   );
 }
@@ -156,9 +196,10 @@ export default function Collection() {
 interface ModifierCardProps {
   modifier: PlannedModifier;
   index: number;
+  onImageClick: (src: string, name: string) => void;
 }
 
-function ModifierCard({ modifier, index }: ModifierCardProps) {
+function ModifierCard({ modifier, index, onImageClick }: ModifierCardProps) {
   const getTierName = (tier: number): string => {
     switch (tier) {
       case 1:
@@ -245,14 +286,24 @@ function ModifierCard({ modifier, index }: ModifierCardProps) {
       }}
     >
       <div className="flex flex-col items-center gap-2">
-        <img
-          src={modifier.asset_url}
-          alt={modifier.name}
-          className="w-16 h-16 object-contain transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
-          style={{
-            filter: getGlowFilter(modifier.rarity_tier),
+        <button
+          type="button"
+          className="p-0 border-0 bg-transparent cursor-zoom-in"
+          onClick={(e) => {
+            e.stopPropagation();
+            onImageClick(modifier.asset_url, modifier.name);
           }}
-        />
+          aria-label={`Открыть изображение ${modifier.name}`}
+        >
+          <img
+            src={modifier.asset_url}
+            alt={modifier.name}
+            className="w-16 h-16 object-contain transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
+            style={{
+              filter: getGlowFilter(modifier.rarity_tier),
+            }}
+          />
+        </button>
         <Badge
           variant={getTierBadgeVariant(modifier.rarity_tier)}
           className="font-jetbrains text-[10px] px-2 py-0"

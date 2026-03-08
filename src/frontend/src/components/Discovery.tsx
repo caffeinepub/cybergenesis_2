@@ -1,9 +1,4 @@
-import type {
-  LootCache,
-  ModifierInstance,
-  Result_1,
-  Result_3,
-} from "@/backend";
+import type { LootCache, Result_1, Result_3 } from "@/backend";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useActor } from "@/hooks/useActor";
@@ -13,10 +8,12 @@ import {
   useGetTokenBalance,
   useMintFakeCbr,
 } from "@/hooks/useQueries";
+import * as fakeCbr from "@/lib/fakeCbr";
+import type { LootDropEntry } from "@/lib/fakeCbr";
 import { formatTokenBalance } from "@/lib/tokenUtils";
 import { useQueryClient } from "@tanstack/react-query";
-import { Clock, Gift, Loader2, Package, Zap } from "lucide-react";
-import React, { useState } from "react";
+import { Clock, Gift, Loader2, Package, Sparkles, Zap } from "lucide-react";
+import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 export default function Discovery() {
@@ -37,21 +34,94 @@ export default function Discovery() {
   const [processingCacheId, setProcessingCacheId] = useState<bigint | null>(
     null,
   );
+  const [lootLog, setLootLog] = useState<LootDropEntry[]>([]);
+
+  // Load loot log from localStorage on mount
+  useEffect(() => {
+    setLootLog(fakeCbr.getLootLog());
+  }, []);
 
   const selectedLand = lands?.[0];
 
   React.useEffect(() => {
     if (actor) {
-      loadCaches();
+      initModifiersAndLoadCaches();
     }
   }, [actor]);
+
+  const initModifiersAndLoadCaches = async () => {
+    if (!actor) return;
+    try {
+      // Check if modifiers are initialized
+      const existing = await actor.getAllModifiers();
+      if (existing.length === 0) {
+        // Seed test modifiers
+        await actor.adminSetAllModifiers([
+          {
+            mod_id: BigInt(0),
+            rarity_tier: BigInt(1),
+            name: "ENERGY_BOOST",
+            multiplier_value: 1.1,
+            asset_url: "",
+          },
+          {
+            mod_id: BigInt(1),
+            rarity_tier: BigInt(1),
+            name: "YIELD_BOOST",
+            multiplier_value: 1.15,
+            asset_url: "",
+          },
+          {
+            mod_id: BigInt(2),
+            rarity_tier: BigInt(2),
+            name: "CHARGE_AMPLIFIER",
+            multiplier_value: 1.25,
+            asset_url: "",
+          },
+          {
+            mod_id: BigInt(3),
+            rarity_tier: BigInt(2),
+            name: "POWER_SURGE",
+            multiplier_value: 1.3,
+            asset_url: "",
+          },
+          {
+            mod_id: BigInt(4),
+            rarity_tier: BigInt(3),
+            name: "QUANTUM_FIELD",
+            multiplier_value: 1.5,
+            asset_url: "",
+          },
+          {
+            mod_id: BigInt(5),
+            rarity_tier: BigInt(3),
+            name: "VOID_CRYSTAL",
+            multiplier_value: 1.75,
+            asset_url: "",
+          },
+          {
+            mod_id: BigInt(6),
+            rarity_tier: BigInt(4),
+            name: "MYTHIC_CORE",
+            multiplier_value: 2.0,
+            asset_url: "",
+          },
+        ]);
+        console.log("Test modifiers initialized");
+      }
+    } catch (error) {
+      console.error("Error initializing modifiers:", error);
+    }
+    await loadCaches();
+  };
 
   const loadCaches = async () => {
     if (!actor) return;
     setCachesLoading(true);
     try {
       const result = await actor.getMyLootCaches();
-      setCaches(result);
+      // Only show unopened caches
+      setCaches(result.filter((c) => !c.is_opened));
     } catch (error) {
       console.error("Error loading caches:", error);
     } finally {
@@ -127,13 +197,29 @@ export default function Discovery() {
       console.log("Process result:", result);
 
       if (result.__kind__ === "ok") {
+        const mod = result.ok;
+        const cacheTier = caches.find((c) => c.cache_id === cacheId)
+          ? Number(caches.find((c) => c.cache_id === cacheId)!.tier)
+          : 0;
         toast.success(
-          `Получен модификатор: ${result.ok.modifierType} (Уровень ${result.ok.rarity_tier})`,
+          `Получен модификатор: ${mod.modifierType} (Tier ${mod.rarity_tier})`,
         );
+        // Save drop to loot log
+        fakeCbr.addLootDrop({
+          cacheId: cacheId.toString(),
+          cacheTier,
+          modifierType: mod.modifierType,
+          rarityTier: Number(mod.rarity_tier),
+          multiplierValue: Number(mod.multiplier_value),
+          openedAt: Date.now(),
+        });
+        setLootLog(fakeCbr.getLootLog());
+        // Remove opened cache from list immediately
+        setCaches((prev) => prev.filter((c) => c.cache_id !== cacheId));
       } else {
         toast.error(`Ошибка открытия кэша: ${result.err}`);
+        await loadCaches();
       }
-      await loadCaches();
       queryClient.invalidateQueries({ queryKey: ["modifierInventory"] });
     } catch (error: any) {
       console.error("Process cache error:", error);
@@ -345,7 +431,77 @@ export default function Discovery() {
         ))}
       </div>
 
-      {/* Inventory */}
+      {/* Loot Drop Log */}
+      <Card className="bg-black/40 backdrop-blur-md border-[#9933ff]/30 shadow-[0_0_15px_rgba(153,51,255,0.3)]">
+        <CardHeader>
+          <CardTitle className="text-[#9933ff] flex items-center gap-2">
+            <Sparkles className="w-5 h-5" />
+            ПОЛУЧЕННЫЙ ЛУТ
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {lootLog.length === 0 ? (
+            <p className="text-white/50 text-center py-4 font-jetbrains">
+              Откройте кэш, чтобы увидеть выпавшие модификаторы
+            </p>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {lootLog.map((entry) => {
+                const tierColors: Record<number, string> = {
+                  1: "text-gray-400 border-gray-400/30 bg-gray-400/5",
+                  2: "text-blue-400 border-blue-400/30 bg-blue-400/5",
+                  3: "text-purple-400 border-purple-400/30 bg-purple-400/5",
+                  4: "text-yellow-400 border-yellow-400/30 bg-yellow-400/5",
+                };
+                const tierNames: Record<number, string> = {
+                  1: "Обычный",
+                  2: "Редкий",
+                  3: "Легендарный",
+                  4: "Мифический",
+                };
+                const colorClass =
+                  tierColors[entry.rarityTier] ??
+                  "text-white border-white/20 bg-white/5";
+                return (
+                  <div
+                    key={entry.id}
+                    className={`rounded-lg p-3 border ${colorClass} flex items-center justify-between`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="text-2xl">
+                        {entry.rarityTier === 4
+                          ? "🌟"
+                          : entry.rarityTier === 3
+                            ? "💎"
+                            : entry.rarityTier === 2
+                              ? "🔵"
+                              : "⚪"}
+                      </div>
+                      <div>
+                        <p className="text-white font-medium font-jetbrains text-sm">
+                          {entry.modifierType}
+                        </p>
+                        <p className="text-white/50 text-xs font-jetbrains">
+                          {tierNames[entry.rarityTier] ?? "Неизвестный"} • +
+                          {(entry.multiplierValue * 100 - 100).toFixed(0)}% •
+                          Кэш #{entry.cacheId} (Tier {entry.cacheTier})
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-white/40 text-xs font-jetbrains">
+                        {new Date(entry.openedAt).toLocaleTimeString()}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* My Caches */}
       <Card className="bg-black/40 backdrop-blur-md border-[#00d4ff]/30 shadow-[0_0_15px_rgba(0,212,255,0.3)]">
         <CardHeader>
           <CardTitle className="text-[#00d4ff] flex items-center gap-2">

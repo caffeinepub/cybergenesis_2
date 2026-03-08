@@ -1,4 +1,5 @@
 import type { LandData, ModifierInstance } from "@/backend";
+import PlotCustomization from "@/components/PlotCustomization";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   useApplyModifier,
@@ -12,8 +13,16 @@ import {
   useMintFakeCbr,
   useUpgradePlot,
 } from "@/hooks/useQueries";
+import * as fakeCbr from "@/lib/fakeCbr";
 import { formatTokenBalance } from "@/lib/tokenUtils";
-import { ExternalLink, Loader2, MapPin, TrendingUp, Zap } from "lucide-react";
+import {
+  BatteryCharging,
+  ExternalLink,
+  Loader2,
+  MapPin,
+  TrendingUp,
+  Zap,
+} from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 
@@ -47,8 +56,50 @@ export default function LandDashboard({
     null,
   );
   const [isCooldownActive, setIsCooldownActive] = useState(false);
+  const [simulatedCharge, setSimulatedCharge] = useState<number | null>(null);
 
   const selectedLand: LandData | undefined = lands?.[selectedLandIndex];
+
+  // Simulate charge accumulation: 100 charge per minute (test rate)
+  const landIdForCharge = selectedLand?.landId;
+  const chargeCapForEffect = selectedLand
+    ? Number(selectedLand.chargeCap)
+    : 1000;
+  const backendChargeForEffect = selectedLand
+    ? Number(selectedLand.cycleCharge)
+    : 0;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: backendChargeForEffect intentionally excluded — including it would reset the interval on every tick
+  useEffect(() => {
+    if (landIdForCharge === undefined) return;
+    const landId = landIdForCharge.toString();
+    const cap = chargeCapForEffect;
+    const initial = fakeCbr.getSimulatedCharge(
+      landId,
+      backendChargeForEffect,
+      cap,
+    );
+    setSimulatedCharge(initial);
+    const chargeInterval = setInterval(() => {
+      const updated = fakeCbr.getSimulatedCharge(
+        landId,
+        backendChargeForEffect,
+        cap,
+      );
+      setSimulatedCharge(updated);
+    }, 1000);
+    return () => clearInterval(chargeInterval);
+  }, [landIdForCharge, chargeCapForEffect]);
+
+  // Sync simulated charge when backend cycleCharge changes (after spending charge)
+  useEffect(() => {
+    if (landIdForCharge === undefined) return;
+    fakeCbr.syncCharge(
+      landIdForCharge.toString(),
+      backendChargeForEffect,
+      chargeCapForEffect,
+    );
+    setSimulatedCharge(backendChargeForEffect);
+  }, [backendChargeForEffect, landIdForCharge, chargeCapForEffect]);
 
   // Calculate cooldown timer
   useEffect(() => {
@@ -346,11 +397,27 @@ export default function LandDashboard({
               </p>
             </div>
             <div>
-              <p className="text-white/50 text-sm font-jetbrains">Charge</p>
-              <p className="text-white font-medium font-jetbrains">
-                {selectedLand.cycleCharge.toString()} /{" "}
-                {selectedLand.chargeCap.toString()}
+              <p className="text-white/50 text-sm font-jetbrains flex items-center gap-1">
+                <BatteryCharging className="w-3 h-3 text-[#00ff41]" />
+                Charge{" "}
+                <span className="text-[#00ff41]/60 text-[10px]">
+                  (+100/мин)
+                </span>
               </p>
+              <p className="text-[#00ff41] font-medium font-jetbrains font-bold">
+                {simulatedCharge !== null
+                  ? simulatedCharge
+                  : selectedLand.cycleCharge.toString()}{" "}
+                / {selectedLand.chargeCap.toString()}
+              </p>
+              <div className="mt-1 w-full bg-white/10 rounded-full h-1.5">
+                <div
+                  className="h-1.5 rounded-full bg-gradient-to-r from-[#00ff41] to-[#00ffff] transition-all duration-1000"
+                  style={{
+                    width: `${Math.min(100, ((simulatedCharge ?? Number(selectedLand.cycleCharge)) / Number(selectedLand.chargeCap)) * 100)}%`,
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -530,6 +597,9 @@ export default function LandDashboard({
           </div>
         </CardContent>
       </Card>
+
+      {/* Plot Customization */}
+      <PlotCustomization selectedLandIndex={selectedLandIndex} />
 
       {/* Admin Debug Panel */}
       <Card className="glassmorphism border border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.3)]">

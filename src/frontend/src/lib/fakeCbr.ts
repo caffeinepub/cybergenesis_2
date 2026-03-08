@@ -317,3 +317,117 @@ export function getProposals(onlyActive?: boolean): FakeProposal[] {
   const proposals = loadProposals();
   return onlyActive ? proposals.filter((p) => p.isActive) : proposals;
 }
+
+// ---------------------------------------------------------------------------
+// Cycle Charge simulation — 100 charge per minute (for testing)
+// ---------------------------------------------------------------------------
+
+const CHARGE_UPDATE_KEY = "fake_charge_update";
+
+interface ChargeState {
+  [landId: string]: {
+    lastUpdateMs: number;
+    currentCharge: number;
+    chargeCap: number;
+  };
+}
+
+function loadChargeState(): ChargeState {
+  try {
+    const raw = localStorage.getItem(CHARGE_UPDATE_KEY);
+    return raw ? (JSON.parse(raw) as ChargeState) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveChargeState(data: ChargeState): void {
+  localStorage.setItem(CHARGE_UPDATE_KEY, JSON.stringify(data));
+}
+
+/** Call this on each render tick to calculate accumulated charge (100/min). */
+export function getSimulatedCharge(
+  landId: string,
+  backendCharge: number,
+  chargeCap: number,
+): number {
+  const state = loadChargeState();
+  const entry = state[landId];
+  const now = Date.now();
+
+  if (!entry) {
+    // First time we see this land — init from backend value
+    state[landId] = {
+      lastUpdateMs: now,
+      currentCharge: backendCharge,
+      chargeCap,
+    };
+    saveChargeState(state);
+    return backendCharge;
+  }
+
+  const elapsedMs = now - entry.lastUpdateMs;
+  // 100 charge per minute = 100/60000 per ms
+  const gained = (elapsedMs * 100) / 60000;
+  const newCharge = Math.min(entry.currentCharge + gained, chargeCap);
+
+  state[landId] = { lastUpdateMs: now, currentCharge: newCharge, chargeCap };
+  saveChargeState(state);
+
+  return Math.floor(newCharge);
+}
+
+/** Reset charge state for a land (e.g. after spending charge via backend call). */
+export function syncCharge(
+  landId: string,
+  backendCharge: number,
+  chargeCap: number,
+): void {
+  const state = loadChargeState();
+  state[landId] = {
+    lastUpdateMs: Date.now(),
+    currentCharge: backendCharge,
+    chargeCap,
+  };
+  saveChargeState(state);
+}
+
+// ---------------------------------------------------------------------------
+// Loot drop log — stores modifier instances gained from opening caches
+// ---------------------------------------------------------------------------
+
+const LOOT_LOG_KEY = "fake_loot_log";
+
+export interface LootDropEntry {
+  id: number;
+  cacheId: string;
+  cacheTier: number;
+  modifierType: string;
+  rarityTier: number;
+  multiplierValue: number;
+  openedAt: number;
+}
+
+function loadLootLog(): LootDropEntry[] {
+  try {
+    const raw = localStorage.getItem(LOOT_LOG_KEY);
+    return raw ? (JSON.parse(raw) as LootDropEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLootLog(data: LootDropEntry[]): void {
+  localStorage.setItem(LOOT_LOG_KEY, JSON.stringify(data));
+}
+
+export function addLootDrop(entry: Omit<LootDropEntry, "id">): void {
+  const log = loadLootLog();
+  const id = log.length > 0 ? Math.max(...log.map((e) => e.id)) + 1 : 1;
+  log.unshift({ id, ...entry }); // newest first
+  saveLootLog(log);
+}
+
+export function getLootLog(): LootDropEntry[] {
+  return loadLootLog();
+}
