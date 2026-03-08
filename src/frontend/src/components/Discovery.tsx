@@ -11,6 +11,7 @@ import {
   useDebugTokenBalance,
   useGetLandData,
   useGetTokenBalance,
+  useMintFakeCbr,
 } from "@/hooks/useQueries";
 import { formatTokenBalance } from "@/lib/tokenUtils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -28,6 +29,7 @@ export default function Discovery() {
     error: balanceError,
   } = useGetTokenBalance();
   const debugBalanceMutation = useDebugTokenBalance();
+  const mintFakeCbrMutation = useMintFakeCbr();
 
   const [caches, setCaches] = useState<LootCache[]>([]);
   const [cachesLoading, setCachesLoading] = useState(false);
@@ -177,25 +179,17 @@ export default function Discovery() {
     }
   };
 
-  const canOpenCache = (cache: LootCache) => {
-    const fourHours = 4 * 60 * 60 * 1000000000;
-    const timeSinceDiscovery =
-      Date.now() * 1000000 - Number(cache.discovered_at);
-    return timeSinceDiscovery >= fourHours;
-  };
-
   const getTimeRemaining = (cache: LootCache) => {
-    const fourHours = 4 * 60 * 60 * 1000000000;
-    const timeSinceDiscovery =
-      Date.now() * 1000000 - Number(cache.discovered_at);
-    const remaining = fourHours - timeSinceDiscovery;
+    const fourHoursNs = BigInt(4 * 60 * 60) * BigInt(1_000_000_000);
+    const nowNs = BigInt(Date.now()) * BigInt(1_000_000);
+    const elapsed = nowNs - cache.discovered_at;
+    const remaining = fourHoursNs - elapsed;
 
-    if (remaining <= 0) return "Готов к открытию";
+    if (remaining <= BigInt(0)) return null;
 
-    const hours = Math.floor(remaining / (60 * 60 * 1000000000));
-    const minutes = Math.floor(
-      (remaining % (60 * 60 * 1000000000)) / (60 * 1000000000),
-    );
+    const totalSec = Number(remaining / BigInt(1_000_000_000));
+    const hours = Math.floor(totalSec / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
 
     return `${hours}ч ${minutes}м`;
   };
@@ -245,29 +239,49 @@ export default function Discovery() {
               </Button>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <p className="text-3xl font-bold text-white">
                 {formatTokenBalance(tokenBalance || BigInt(0))} CBR
               </p>
               <p className="text-sm text-white/50">
                 Raw: {(tokenBalance || BigInt(0)).toString()} e8s
               </p>
-              <Button
-                onClick={handleDebugBalance}
-                disabled={debugBalanceMutation.isPending}
-                size="sm"
-                variant="ghost"
-                className="text-[#00d4ff] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"
-              >
-                {debugBalanceMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    Обновление...
-                  </>
-                ) : (
-                  "Обновить баланс"
-                )}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={handleDebugBalance}
+                  disabled={debugBalanceMutation.isPending}
+                  size="sm"
+                  variant="ghost"
+                  className="text-[#00d4ff] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"
+                >
+                  {debugBalanceMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Обновление...
+                    </>
+                  ) : (
+                    "Обновить баланс"
+                  )}
+                </Button>
+                <Button
+                  data-ocid="discovery.mint_cbr.primary_button"
+                  onClick={() =>
+                    mintFakeCbrMutation.mutate(BigInt(100_000_000_000))
+                  }
+                  disabled={mintFakeCbrMutation.isPending}
+                  size="sm"
+                  className="bg-[#00ff41]/20 hover:bg-[#00ff41]/30 text-[#00ff41] border border-[#00ff41]/40 font-bold"
+                >
+                  {mintFakeCbrMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Минтинг...
+                    </>
+                  ) : (
+                    "🪙 Получить 100 CBR"
+                  )}
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
@@ -362,10 +376,21 @@ export default function Discovery() {
                         {getTierName(Number(cache.tier))} Кэш #
                         {cache.cache_id.toString()}
                       </p>
-                      <p className="text-white/50 text-sm flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {cache.is_opened ? "Открыт" : getTimeRemaining(cache)}
-                      </p>
+                      {!cache.is_opened &&
+                        (() => {
+                          const remaining = getTimeRemaining(cache);
+                          return remaining ? (
+                            <p className="text-white/50 text-sm flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {remaining} (−10 заряда за раннее открытие)
+                            </p>
+                          ) : (
+                            <p className="text-green-400 text-sm flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              Готов к бесплатному открытию
+                            </p>
+                          );
+                        })()}
                     </div>
                     <div>
                       {cache.is_opened ? (
@@ -373,9 +398,7 @@ export default function Discovery() {
                       ) : (
                         <Button
                           onClick={() => handleProcessCache(cache.cache_id)}
-                          disabled={
-                            !canOpenCache(cache) || processingCacheId !== null
-                          }
+                          disabled={processingCacheId !== null}
                           size="sm"
                           className="bg-[#00ff41] hover:bg-[#00ff41]/80 text-black font-bold"
                         >

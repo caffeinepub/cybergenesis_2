@@ -9,6 +9,7 @@ import {
   useGetLandData,
   useGetModifierInventory,
   useGetTokenBalance,
+  useMintFakeCbr,
   useUpgradePlot,
 } from "@/hooks/useQueries";
 import { formatTokenBalance } from "@/lib/tokenUtils";
@@ -35,6 +36,7 @@ export default function LandDashboard({
   const upgradePlotMutation = useUpgradePlot();
   const debugBalanceMutation = useDebugTokenBalance();
   const applyModifierMutation = useApplyModifier();
+  const mintFakeCbrMutation = useMintFakeCbr();
 
   // Admin-only canister balance
   const { data: canisterBalance } = useGetCanisterTokenBalance();
@@ -260,21 +262,41 @@ export default function LandDashboard({
               <p className="text-3xl font-bold text-white font-orbitron">
                 {formatTokenBalance(tokenBalance || BigInt(0))} CBR
               </p>
-              <button
-                type="button"
-                onClick={handleDebugBalance}
-                disabled={debugBalanceMutation.isPending}
-                className="px-3 py-1 rounded glassmorphism text-[#00ffff] hover:text-[#00ffff] hover:bg-[#00ffff]/10 transition-all duration-300 text-sm font-jetbrains border border-[#00ffff]/30"
-              >
-                {debugBalanceMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                    Refreshing...
-                  </>
-                ) : (
-                  "Refresh Balance"
-                )}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleDebugBalance}
+                  disabled={debugBalanceMutation.isPending}
+                  className="px-3 py-1 rounded glassmorphism text-[#00ffff] hover:text-[#00ffff] hover:bg-[#00ffff]/10 transition-all duration-300 text-sm font-jetbrains border border-[#00ffff]/30"
+                >
+                  {debugBalanceMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
+                      Refreshing...
+                    </>
+                  ) : (
+                    "Refresh Balance"
+                  )}
+                </button>
+                <button
+                  data-ocid="dashboard.mint_cbr.primary_button"
+                  type="button"
+                  onClick={() =>
+                    mintFakeCbrMutation.mutate(BigInt(1_000_000_000_000))
+                  }
+                  disabled={mintFakeCbrMutation.isPending}
+                  className="px-3 py-1 rounded glassmorphism text-[#00ff41] hover:bg-[#00ff41]/10 transition-all duration-300 text-sm font-jetbrains border border-[#00ff41]/40 disabled:opacity-50"
+                >
+                  {mintFakeCbrMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
+                      Minting...
+                    </>
+                  ) : (
+                    "🧪 Mint 1000 CBR"
+                  )}
+                </button>
+              </div>
             </div>
           )}
         </CardContent>

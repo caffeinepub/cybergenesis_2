@@ -160,15 +160,13 @@ export default function Dashboard() {
             <div
               className="lg:col-span-2 rounded-lg overflow-hidden glassmorphism neon-border box-glow-cyan animate-pulse-glow"
               style={{
-                height: "65vh",
+                minHeight: "65vh",
                 position: "relative",
+                display: "flex",
+                flexDirection: "column",
               }}
             >
-              <div style={{ width: "100%", height: "100%" }}>
-                <ThreeErrorBoundary>
-                  <CubeVisualization biome={currentLand.biome} />
-                </ThreeErrorBoundary>
-              </div>
+              <CubeVisualization biome={currentLand.biome} />
             </div>
 
             <div className="space-y-4">

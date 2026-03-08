@@ -5,13 +5,13 @@ import type {
   TopLandEntry,
   UserProfile,
 } from "@/backend";
+import * as fakeCbr from "@/lib/fakeCbr";
 import { formatTokenBalance } from "@/lib/tokenUtils";
 import type { Principal } from "@icp-sdk/core/principal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useActor } from "./useActor";
 import { useInternetIdentity } from "./useInternetIdentity";
-import { useTokenActor } from "./useTokenActor";
 
 // Placeholder types for governance and marketplace (not yet in backend)
 interface Proposal {
@@ -179,80 +179,47 @@ export function useSaveCallerUserProfile() {
   });
 }
 
-// Token Balance Query with Enhanced Retry
+// Token Balance Query — reads from fake localStorage CBR
 export function useGetTokenBalance() {
-  const { actor: tokenActor, isFetching } = useTokenActor();
   const { identity } = useInternetIdentity();
 
   return useQuery({
     queryKey: ["tokenBalance", identity?.getPrincipal().toString()],
     queryFn: async () => {
-      if (!tokenActor || !identity) {
-        console.log(
-          "Token balance query skipped - actor or identity not available",
-        );
-        return BigInt(0);
-      }
-
-      const principal = identity.getPrincipal();
-      console.log("Getting CBR balance for Principal:", principal.toString());
-
-      try {
-        const balance = await tokenActor.icrc1_balance_of({
-          owner: principal,
-          subaccount: [],
-        });
-        console.log(
-          "CBR balance response:",
-          balance,
-          "Formatted:",
-          formatTokenBalance(balance),
-        );
-        return balance;
-      } catch (error: any) {
-        console.error("CBR balance fetch error:", error);
-        throw error;
-      }
+      if (!identity) return BigInt(0);
+      const principal = identity.getPrincipal().toString();
+      const balance = fakeCbr.getBalance(principal);
+      console.log(
+        "Fake CBR balance for",
+        principal,
+        ":",
+        formatTokenBalance(balance),
+      );
+      return balance;
     },
-    enabled: !!tokenActor && !!identity && !isFetching,
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
-    staleTime: 10000,
+    enabled: !!identity,
+    staleTime: 5000,
   });
 }
 
-// Debug Token Balance Hook
+// Debug Token Balance Hook — reads fake balance from localStorage
 export function useDebugTokenBalance() {
-  const { actor: tokenActor } = useTokenActor();
   const { identity } = useInternetIdentity();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async () => {
-      if (!tokenActor || !identity) {
-        throw new Error("Token actor or identity not available");
-      }
-
-      const principal = identity.getPrincipal();
-      console.log(
-        "🔍 Debug: Fetching CBR balance for Principal:",
-        principal.toString(),
-      );
-
-      const balance = await tokenActor.icrc1_balance_of({
-        owner: principal,
-        subaccount: [],
-      });
-
-      console.log("🔍 Debug: Raw balance response:", balance);
-      console.log("🔍 Debug: Formatted balance:", formatTokenBalance(balance));
-
+      if (!identity) throw new Error("Identity not available");
+      const principal = identity.getPrincipal().toString();
+      const balance = fakeCbr.getBalance(principal);
+      console.log("🔍 Fake CBR balance:", balance.toString());
       return balance;
     },
     onSuccess: (balance) => {
-      toast.success(`Баланс обновлен: ${formatTokenBalance(balance)} CBR`);
+      queryClient.invalidateQueries({ queryKey: ["tokenBalance"] });
+      toast.success(`Баланс: ${formatTokenBalance(balance)} CBR`);
     },
     onError: (error: any) => {
-      console.error("🔍 Debug: Balance fetch failed:", error);
       toast.error(
         `Ошибка получения баланса: ${error.message || "Неизвестная ошибка"}`,
       );
@@ -260,72 +227,65 @@ export function useDebugTokenBalance() {
   });
 }
 
-// Canister Token Balance Query (Admin Only)
+// Canister Token Balance Query — returns total fake supply
 export function useGetCanisterTokenBalance() {
-  const { actor: tokenActor } = useTokenActor();
-
   return useQuery({
     queryKey: ["canisterTokenBalance"],
     queryFn: async () => {
-      if (!tokenActor) {
-        console.log(
-          "Canister balance query skipped - token actor not available",
-        );
-        return BigInt(0);
-      }
-
-      console.log("Getting canister token balance...");
-
-      try {
-        const balance = await tokenActor.getCanisterTokenBalance();
-        console.log(
-          "Canister token balance response:",
-          balance,
-          "Formatted:",
-          formatTokenBalance(balance),
-        );
-        return balance;
-      } catch (error: any) {
-        console.error("Canister balance fetch error:", error);
-        throw error;
-      }
+      const total = fakeCbr.getTotalSupply();
+      console.log("Fake CBR total supply:", total.toString());
+      return total;
     },
-    enabled: !!tokenActor,
-    retry: 2,
-    retryDelay: 2000,
+    staleTime: 10000,
   });
 }
 
-// Debug Canister Balance Hook (Admin Only)
+// Debug Canister Balance Hook — returns total fake supply
 export function useDebugCanisterBalance() {
-  const { actor: tokenActor } = useTokenActor();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async () => {
-      if (!tokenActor) {
-        throw new Error("Token actor not available");
-      }
-
-      console.log("🔍 Debug: Fetching canister token balance...");
-
-      const balance = await tokenActor.getCanisterTokenBalance();
-
-      console.log("🔍 Debug: Raw canister balance response:", balance);
-      console.log(
-        "🔍 Debug: Formatted canister balance:",
-        formatTokenBalance(balance),
-      );
-
-      return balance;
+      const total = fakeCbr.getTotalSupply();
+      console.log("🔍 Fake CBR total supply:", total.toString());
+      return total;
     },
     onSuccess: (balance) => {
+      queryClient.invalidateQueries({ queryKey: ["canisterTokenBalance"] });
       toast.success(`Баланс контракта: ${formatTokenBalance(balance)} CBR`);
     },
     onError: (error: any) => {
-      console.error("🔍 Debug: Canister balance fetch failed:", error);
       toast.error(
         `Ошибка получения баланса контракта: ${error.message || "Неизвестная ошибка"}`,
       );
+    },
+  });
+}
+
+// Mint fake CBR tokens for testing — no restrictions
+export function useMintFakeCbr() {
+  const { identity } = useInternetIdentity();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (amount: bigint) => {
+      if (!identity) throw new Error("Identity not available");
+      const principal = identity.getPrincipal().toString();
+      fakeCbr.mintTokens(principal, amount);
+      return fakeCbr.getBalance(principal);
+    },
+    onSuccess: (newBalance, amount) => {
+      queryClient.invalidateQueries({ queryKey: ["tokenBalance"] });
+      queryClient.invalidateQueries({ queryKey: ["canisterTokenBalance"] });
+      const amountFormatted = formatTokenBalance(amount);
+      toast.success(`Получено ${amountFormatted} CBR для тестирования`);
+      console.log(
+        "Fake CBR minted. New balance:",
+        formatTokenBalance(newBalance),
+      );
+    },
+    onError: (error: any) => {
+      toast.error(`Ошибка минтинга: ${error.message || "Неизвестная ошибка"}`);
     },
   });
 }
@@ -430,7 +390,7 @@ export function useUpdateDecoration() {
   });
 }
 
-// Get Modifier Inventory Query
+// Get Modifier Inventory Query — fetches real data from backend
 export function useGetModifierInventory() {
   const { actor, isFetching } = useActor();
 
@@ -438,13 +398,10 @@ export function useGetModifierInventory() {
     queryKey: ["modifierInventory"],
     queryFn: async () => {
       if (!actor) return [];
-      console.log("Fetching modifier inventory...");
-
-      // Note: Backend needs to expose getMyModifierInventory() or similar
-      // For now, we'll return empty array as placeholder
-      // TODO: Update when backend method is available
-      console.warn("getMyModifierInventory not yet implemented in backend");
-      return [];
+      console.log("Fetching modifier inventory via getMyModifications...");
+      const result = await actor.getMyModifications();
+      console.log("Modifier inventory fetched:", result);
+      return result;
     },
     enabled: !!actor && !isFetching,
     retry: 2,
@@ -541,27 +498,48 @@ export function useGetMyModifications() {
   });
 }
 
-// Governance Hooks (placeholder implementations - need backend integration)
+// Governance Hooks — backed by fake localStorage storage
 export function useGetStakedBalance() {
+  const { identity } = useInternetIdentity();
+
   return useQuery({
-    queryKey: ["stakedBalance"],
-    queryFn: async () => BigInt(0),
-    enabled: false, // Disabled until governance backend is integrated
+    queryKey: ["stakedBalance", identity?.getPrincipal().toString()],
+    queryFn: async () => {
+      if (!identity) return BigInt(0);
+      return fakeCbr.getStake(identity.getPrincipal().toString());
+    },
+    enabled: !!identity,
+    staleTime: 5000,
   });
 }
 
 export function useStakeTokens() {
+  const { identity } = useInternetIdentity();
   const queryClient = useQueryClient();
 
   return useMutation<StakeResult, Error, bigint>({
     mutationFn: async (amount: bigint) => {
-      console.log("Staking tokens:", amount);
-      // TODO: Implement governance staking
-      throw new Error("Governance staking not yet implemented");
+      if (!identity) throw new Error("Identity not available");
+      const principal = identity.getPrincipal().toString();
+      const success = fakeCbr.stake(principal, amount);
+
+      if (!success) {
+        const available = fakeCbr.getBalance(principal);
+        return {
+          __kind__: "insufficientTokens",
+          insufficientTokens: { required: amount, available },
+        };
+      }
+
+      const newStake = fakeCbr.getStake(principal);
+      return { __kind__: "success", success: { newStake } };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["stakedBalance"] });
-      toast.success("Токены застейканы!");
+      queryClient.invalidateQueries({ queryKey: ["tokenBalance"] });
+      if (result.__kind__ === "success") {
+        toast.success("Токены застейканы!");
+      }
     },
     onError: (error: any) => {
       console.error("Stake tokens error:", error);
@@ -571,18 +549,30 @@ export function useStakeTokens() {
 }
 
 export function useGetAllActiveProposals() {
+  const { identity } = useInternetIdentity();
+
   return useQuery<Proposal[]>({
     queryKey: ["activeProposals"],
     queryFn: async () => {
-      console.log("Fetching active proposals...");
-      // TODO: Implement governance proposals
-      return [];
+      const fakeProposals = fakeCbr.getProposals(true);
+      return fakeProposals.map((p) => ({
+        id: BigInt(p.id),
+        title: p.title,
+        description: p.description,
+        proposer: p.proposer as unknown as Principal,
+        createdAt: BigInt(p.createdAt) as unknown as Time,
+        votesYes: BigInt(p.votesYes),
+        votesNo: BigInt(p.votesNo),
+        isActive: p.isActive,
+      }));
     },
-    enabled: false, // Disabled until governance backend is integrated
+    enabled: !!identity,
+    staleTime: 5000,
   });
 }
 
 export function useCreateProposal() {
+  const { identity } = useInternetIdentity();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -590,9 +580,10 @@ export function useCreateProposal() {
       title,
       description,
     }: { title: string; description: string }) => {
-      console.log("Creating proposal:", title, description);
-      // TODO: Implement governance proposal creation
-      throw new Error("Governance proposal creation not yet implemented");
+      if (!identity) throw new Error("Identity not available");
+      const principal = identity.getPrincipal().toString();
+      const proposalId = fakeCbr.createProposal(title, description, principal);
+      return proposalId;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["activeProposals"] });
@@ -608,6 +599,7 @@ export function useCreateProposal() {
 }
 
 export function useVote() {
+  const { identity } = useInternetIdentity();
   const queryClient = useQueryClient();
 
   return useMutation<
@@ -619,13 +611,37 @@ export function useVote() {
       proposalId,
       choice,
     }: { proposalId: bigint; choice: boolean }) => {
-      console.log("Voting on proposal:", proposalId, choice);
-      // TODO: Implement governance voting
-      throw new Error("Governance voting not yet implemented");
+      if (!identity) throw new Error("Identity not available");
+      const principal = identity.getPrincipal().toString();
+      const result = fakeCbr.voteOnProposal(
+        Number(proposalId),
+        choice,
+        principal,
+      );
+
+      if (!result.success) {
+        if (result.reason === "Proposal not found") {
+          return { __kind__: "proposalNotFound", proposalNotFound: null };
+        }
+        if (result.reason === "Proposal not active") {
+          return { __kind__: "proposalNotActive", proposalNotActive: null };
+        }
+        if (result.reason === "Already voted") {
+          return { __kind__: "alreadyVoted", alreadyVoted: null };
+        }
+        return { __kind__: "notStaker", notStaker: null };
+      }
+
+      return {
+        __kind__: "success",
+        success: { weight: result.weight ?? BigInt(100000000) },
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["activeProposals"] });
-      toast.success("Голос учтен!");
+      if (result.__kind__ === "success") {
+        toast.success("Голос учтен!");
+      }
     },
     onError: (error: any) => {
       console.error("Vote error:", error);
@@ -636,20 +652,30 @@ export function useVote() {
   });
 }
 
-// Marketplace Hooks (placeholder implementations - need backend integration)
+// Marketplace Hooks — backed by fake localStorage storage
 export function useGetAllActiveListings() {
+  const { identity } = useInternetIdentity();
+
   return useQuery<Listing[]>({
     queryKey: ["activeListings"],
     queryFn: async () => {
-      console.log("Fetching active listings...");
-      // TODO: Implement marketplace listings
-      return [];
+      const fakeListings = fakeCbr.getActiveListings();
+      return fakeListings.map((l) => ({
+        listingId: BigInt(l.listingId),
+        itemId: BigInt(l.itemId),
+        itemType: l.itemType === "Land" ? ItemType.Land : ItemType.Modifier,
+        seller: l.seller as unknown as Principal,
+        price: BigInt(l.price),
+        isActive: l.isActive,
+      }));
     },
-    enabled: false, // Disabled until marketplace backend is integrated
+    enabled: !!identity,
+    staleTime: 5000,
   });
 }
 
 export function useListItem() {
+  const { identity } = useInternetIdentity();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -658,9 +684,16 @@ export function useListItem() {
       itemType,
       price,
     }: { itemId: bigint; itemType: ItemType; price: bigint }) => {
-      console.log("Listing item:", itemId, itemType, price);
-      // TODO: Implement marketplace listing
-      throw new Error("Marketplace listing not yet implemented");
+      if (!identity) throw new Error("Identity not available");
+      const principal = identity.getPrincipal().toString();
+      const fakeType = itemType === ItemType.Land ? "Land" : "Modifier";
+      const listingId = fakeCbr.createListing(
+        Number(itemId),
+        fakeType,
+        price,
+        principal,
+      );
+      return listingId;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["activeListings"] });
@@ -676,19 +709,52 @@ export function useListItem() {
 }
 
 export function useBuyItem() {
+  const { identity } = useInternetIdentity();
   const queryClient = useQueryClient();
 
   return useMutation<BuyResult, Error, bigint>({
     mutationFn: async (listingId: bigint) => {
-      console.log("Buying item:", listingId);
-      // TODO: Implement marketplace buying
-      throw new Error("Marketplace buying not yet implemented");
+      if (!identity) throw new Error("Identity not available");
+      const principal = identity.getPrincipal().toString();
+      const result = fakeCbr.buyListing(Number(listingId), principal);
+
+      if (!result.success) {
+        const reason = result.reason ?? "";
+        if (reason.startsWith("Insufficient funds")) {
+          const buyerBalance = fakeCbr.getBalance(principal);
+          return {
+            __kind__: "insufficientFunds",
+            insufficientFunds: {
+              required: BigInt(0),
+              available: buyerBalance,
+            },
+          };
+        }
+        if (reason === "Cannot buy own listing") {
+          return { __kind__: "cannotBuyOwnListing", cannotBuyOwnListing: null };
+        }
+        if (reason === "Listing not active") {
+          return { __kind__: "listingNotActive", listingNotActive: null };
+        }
+        return { __kind__: "listingNotFound", listingNotFound: null };
+      }
+
+      return {
+        __kind__: "success",
+        success: {
+          buyer: principal as unknown as Principal,
+          seller: principal as unknown as Principal,
+          price: BigInt(0),
+        },
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["activeListings"] });
       queryClient.invalidateQueries({ queryKey: ["landData"] });
       queryClient.invalidateQueries({ queryKey: ["tokenBalance"] });
-      toast.success("Предмет куплен!");
+      if (result.__kind__ === "success") {
+        toast.success("Предмет куплен!");
+      }
     },
     onError: (error: any) => {
       console.error("Buy item error:", error);
@@ -698,13 +764,14 @@ export function useBuyItem() {
 }
 
 export function useCancelListing() {
+  const { identity } = useInternetIdentity();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (listingId: bigint) => {
-      console.log("Cancelling listing:", listingId);
-      // TODO: Implement marketplace cancel listing
-      throw new Error("Marketplace cancel listing not yet implemented");
+      if (!identity) throw new Error("Identity not available");
+      const principal = identity.getPrincipal().toString();
+      fakeCbr.cancelListing(Number(listingId), principal);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["activeListings"] });

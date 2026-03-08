@@ -527,13 +527,8 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
   }
 
   return (
-    <div
-      ref={containerRef}
-      style={{ width: "100%", height: "100%", position: "relative" }}
-      className="group"
-    >
+    <div ref={containerRef} className="relative w-full h-full group">
       <Canvas
-        style={{ width: "100%", height: "100%" }}
         camera={{ position: [0, 0, 6], fov: 45 }}
         dpr={[1, 2]}
         gl={{
@@ -549,37 +544,29 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           gl.setClearAlpha(1.0);
         }}
       >
-        {/* Scene background and fog — always rendered, outside Suspense */}
-        <SceneSetup />
-        <BackgroundSphereWithLayer />
-
-        {/* Lights — always rendered */}
-        <hemisphereLight
-          intensity={0.3}
-          color="#f7f7f7"
-          groundColor="#3a3a3a"
-        />
-        <KeyLightSync />
-        <directionalLight
-          name="SunLight"
-          position={[-10, 20, -15]}
-          intensity={Math.PI * 0.4}
-          color="#ffe4b5"
-        />
-
-        <OrbitControls makeDefault />
-
-        {/* REQ-2..5: Bloom pipeline — always active */}
-        <SelectiveBloomEffect />
-
-        {/* Model + HDRI inside Suspense — loaded async */}
-        <Suspense fallback={null}>
+        <Suspense fallback={<color attach="background" args={["#000000"]} />}>
+          <SceneSetup />
+          <BackgroundSphereWithLayer />
           <LandModel modelUrl={modelUrl} biome={biome} />
           <Environment
             files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/artist_workshop_1k.hdr"
             environmentIntensity={1.0}
             blur={0}
           />
+          <hemisphereLight
+            intensity={0.3}
+            color="#f7f7f7"
+            groundColor="#3a3a3a"
+          />
+          <KeyLightSync />
+          <directionalLight
+            name="SunLight"
+            position={[-10, 20, -15]}
+            intensity={Math.PI * 0.4}
+            color="#ffe4b5"
+          />
+          <OrbitControls makeDefault />
+          <SelectiveBloomEffect />
         </Suspense>
       </Canvas>
 
