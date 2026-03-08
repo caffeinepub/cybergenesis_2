@@ -1,5 +1,3 @@
-// Patch Backend class to add _initializeAccessControlWithSecret before anything else
-import "./lib/backendPatch";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ReactDOM from "react-dom/client";
 import App from "./App";

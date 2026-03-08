@@ -7,6 +7,13 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
+export type Result_2 = {
+    __kind__: "ok";
+    ok: string;
+} | {
+    __kind__: "err";
+    err: string;
+};
 export interface TransformationOutput {
     status: bigint;
     body: Uint8Array;
@@ -29,7 +36,7 @@ export type ClaimResult = {
     success: {
         tokensClaimed: bigint;
         newBalance: bigint;
-        nextClaimTime: Time;
+        nextClaimTime: bigint;
     };
 } | {
     __kind__: "mintFailed";
@@ -62,24 +69,12 @@ export interface LandData {
     coordinates: Coordinates;
     attachedModifications: Array<ModifierInstance>;
 }
-export type DiscoverCacheResult = {
-    __kind__: "success";
-    success: LootCache;
+export type Result_1 = {
+    __kind__: "ok";
+    ok: ModifierInstance;
 } | {
-    __kind__: "insufficientTokens";
-    insufficientTokens: {
-        required: bigint;
-        current: bigint;
-    };
-} | {
-    __kind__: "paymentFailed";
-    paymentFailed: string;
-} | {
-    __kind__: "insufficientCharge";
-    insufficientCharge: {
-        required: bigint;
-        current: bigint;
-    };
+    __kind__: "err";
+    err: string;
 };
 export interface http_header {
     value: string;
@@ -90,12 +85,33 @@ export interface http_request_result {
     body: Uint8Array;
     headers: Array<http_header>;
 }
+export type Result_4 = {
+    __kind__: "ok";
+    ok: LandData;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export type Result = {
+    __kind__: "ok";
+    ok: null;
+} | {
+    __kind__: "err";
+    err: string;
+};
 export interface TopLandEntry {
     upgradeLevel: bigint;
     principal: Principal;
     tokenBalance: bigint;
     plotName: string;
 }
+export type Result_3 = {
+    __kind__: "ok";
+    ok: LootCache;
+} | {
+    __kind__: "err";
+    err: string;
+};
 export interface TransformationInput {
     context: Uint8Array;
     response: http_request_result;
@@ -133,52 +149,40 @@ export interface ModifierInstance {
 export interface UserProfile {
     name: string;
 }
-export interface Modification {
-    model_url: string;
-    mod_id: bigint;
-    rarity_tier: bigint;
-    multiplier_value: number;
-}
 export enum UserRole {
     admin = "admin",
     user = "user",
     guest = "guest"
 }
 export interface backendInterface {
-    adminGetLandData(user: Principal): Promise<Array<LandData> | null>;
-    adminSetAllModifiers(modifier_list: Array<Modifier>): Promise<void>;
-    applyModifier(modifierInstanceId: bigint, landId: bigint): Promise<void>;
+    adminGetLandData(landId: bigint): Promise<LandData | null>;
+    adminSetAllModifiers(mods: Array<Modifier>): Promise<Result>;
+    applyModifier(landId: bigint, modifierInstanceId: bigint): Promise<Result_4>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     claimRewards(landId: bigint): Promise<ClaimResult>;
-    discoverLootCache(tier: bigint): Promise<DiscoverCacheResult>;
+    discoverLootCache(tier: bigint): Promise<Result_3>;
     getAllModifiers(): Promise<Array<Modifier>>;
-    getAssetCanisterCycleBalance(): Promise<string>;
+    getAssetCanisterCycleBalance(): Promise<Result_2>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
-    getCurrentCbrBalance(): Promise<bigint>;
-    getHighestRarityModification(): Promise<Modification | null>;
-    getLandCanisterCycleBalance(): Promise<string>;
+    getCurrentCbrBalance(): Promise<number>;
     getLandData(): Promise<Array<LandData>>;
-    getLandDataQuery(): Promise<Array<LandData> | null>;
+    getLandDataQuery(landId: bigint): Promise<LandData | null>;
     getLandOwner(landId: bigint): Promise<Principal | null>;
-    getModifierById(mod_id: bigint): Promise<Modifier | null>;
-    getModifiersByTier(tier: bigint): Promise<Array<Modifier>>;
     getMyLootCaches(): Promise<Array<LootCache>>;
-    getMyModifications(): Promise<Array<Modification>>;
-    getTopLands(limit: bigint): Promise<Array<TopLandEntry>>;
+    getMyModifications(): Promise<Array<ModifierInstance>>;
+    getTopLands(_n: bigint): Promise<Array<TopLandEntry>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
-    initializeAccessControl(): Promise<void>;
     isCallerAdmin(): Promise<boolean>;
     mintLand(): Promise<LandData>;
-    processCache(cache_id: bigint): Promise<ModifierInstance>;
+    processCache(cache_id: bigint): Promise<Result_1>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    setGovernanceCanister(governance: Principal): Promise<void>;
-    setMarketplaceCanister(marketplace: Principal): Promise<void>;
-    setTokenCanister(token: Principal): Promise<void>;
-    transferLand(to: Principal, landId: bigint): Promise<boolean>;
-    transform(input: TransformationInput): Promise<TransformationOutput>;
-    updateDecoration(landId: bigint, url: string): Promise<void>;
-    updatePlotName(landId: bigint, name: string): Promise<void>;
+    setGovernanceCanister(p: Principal): Promise<void>;
+    setMarketplaceCanister(p: Principal): Promise<void>;
+    setTokenCanister(p: Principal): Promise<void>;
+    transferLand(landId: bigint, to: Principal): Promise<boolean>;
+    transform(raw: TransformationInput): Promise<TransformationOutput>;
+    updateDecoration(landId: bigint, url: string | null): Promise<Result>;
+    updatePlotName(landId: bigint, name: string): Promise<Result>;
     upgradePlot(landId: bigint, cost: bigint): Promise<UpgradeResult>;
-    useConsumableBuff(item_id: bigint): Promise<void>;
 }

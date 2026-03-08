@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   BookOpen,
   Compass,
+  Loader2,
   Map as MapIcon,
   ShoppingCart,
   Trophy,
@@ -17,7 +18,9 @@ import LandSelector from "../components/LandSelector";
 import Leaderboard from "../components/Leaderboard";
 import MapView from "../components/MapView";
 import Marketplace from "../components/Marketplace";
+import ThreeErrorBoundary from "../components/ThreeErrorBoundary";
 import { useActor } from "../hooks/useActor";
+import { useMintLand } from "../hooks/useQueries";
 import Collection from "./Collection";
 
 type TabType =
@@ -33,6 +36,7 @@ export default function Dashboard() {
   const { actor } = useActor();
   const [activeTab, setActiveTab] = useState<TabType>("land");
   const [selectedLandIndex, setSelectedLandIndex] = useState(0);
+  const mintLand = useMintLand();
 
   const { data: lands, isLoading } = useQuery<LandData[]>({
     queryKey: ["landData"],
@@ -78,11 +82,40 @@ export default function Dashboard() {
   if (!lands || lands.length === 0) {
     return (
       <div className="dashboard-container flex flex-col min-h-screen bg-transparent">
-        <div className="min-h-screen flex items-center justify-center relative z-10">
-          <div className="glassmorphism p-8 rounded-lg neon-border box-glow-gold">
-            <div className="text-red-400 text-xl font-orbitron">
-              Земля не найдена
-            </div>
+        <div className="min-h-screen flex items-center justify-center relative z-10 p-4">
+          <div className="glassmorphism p-10 rounded-lg neon-border box-glow-cyan animate-pulse-glow max-w-md w-full text-center space-y-6">
+            <div className="text-6xl">🌌</div>
+            <h2 className="text-2xl font-bold text-[#00ffff] font-orbitron text-glow-cyan tracking-wider">
+              ДОБРО ПОЖАЛОВАТЬ В CYBERGENESIS
+            </h2>
+            <p className="text-[#9933ff] font-jetbrains text-sm leading-relaxed">
+              У вас ещё нет участка земли. Заминтите свой первый участок, чтобы
+              начать игру.
+            </p>
+            <button
+              type="button"
+              onClick={() => mintLand.mutate()}
+              disabled={mintLand.isPending}
+              className="w-full px-6 py-4 btn-gradient-green text-black font-bold rounded-lg font-orbitron flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
+            >
+              {mintLand.isPending ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Минтинг участка...
+                </>
+              ) : (
+                <>
+                  <span>⚡</span>
+                  Заминтить землю
+                </>
+              )}
+            </button>
+            {mintLand.isError && (
+              <p className="text-red-400 text-xs font-jetbrains">
+                Ошибка минтинга:{" "}
+                {(mintLand.error as Error)?.message || "Попробуйте ещё раз"}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -127,13 +160,15 @@ export default function Dashboard() {
             <div
               className="lg:col-span-2 rounded-lg overflow-hidden glassmorphism neon-border box-glow-cyan animate-pulse-glow"
               style={{
-                minHeight: "65vh",
+                height: "65vh",
                 position: "relative",
-                display: "flex",
-                flexDirection: "column",
               }}
             >
-              <CubeVisualization biome={currentLand.biome} />
+              <div style={{ width: "100%", height: "100%" }}>
+                <ThreeErrorBoundary>
+                  <CubeVisualization biome={currentLand.biome} />
+                </ThreeErrorBoundary>
+              </div>
             </div>
 
             <div className="space-y-4">

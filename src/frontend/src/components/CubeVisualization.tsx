@@ -27,6 +27,19 @@ const BIOME_MODEL_MAP: Record<string, string> = {
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_VOID.glb",
   MYTHIC_AETHER:
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_AETHER.glb",
+  // Aliases for short backend biome names
+  Forest:
+    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/FOREST_VALLEY_KTX2.glb",
+  Desert:
+    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/DESERT_DUNE.glb",
+  Ocean:
+    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/ISLAND_ARCHIPELAGO.glb",
+  Mountain:
+    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/SNOW_PEAK.glb",
+  Tundra:
+    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/SNOW_PEAK.glb",
+  Volcano:
+    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/VOLCANIC_CRAG.glb",
 };
 
 // ── Integrated Composite Shader: ACES + Sharpening + Glints ──
@@ -514,8 +527,13 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
   }
 
   return (
-    <div ref={containerRef} className="relative w-full h-full group">
+    <div
+      ref={containerRef}
+      style={{ width: "100%", height: "100%", position: "relative" }}
+      className="group"
+    >
       <Canvas
+        style={{ width: "100%", height: "100%" }}
         camera={{ position: [0, 0, 6], fov: 45 }}
         dpr={[1, 2]}
         gl={{
@@ -525,54 +543,43 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           ...({ dithering: true } as any),
         }}
         onCreated={({ gl }) => {
-          // REQ-1: NoToneMapping, autoClear=false, black clear color
           gl.toneMapping = THREE.NoToneMapping;
           gl.autoClear = false;
           gl.setClearColor(0x000000, 1.0);
           gl.setClearAlpha(1.0);
-          // DO NOT change gl.outputColorSpace — leave at default SRGBColorSpace
-          // NO toneMappingExposure assignment
         }}
       >
-        {/* REQ-7: Opaque black background during Suspense loading — no transparent flash */}
-        <Suspense fallback={<color attach="background" args={["#000000"]} />}>
-          {/* Scene background and fog */}
-          <SceneSetup />
+        {/* Scene background and fog — always rendered, outside Suspense */}
+        <SceneSetup />
+        <BackgroundSphereWithLayer />
 
-          {/* REQ-6: BackgroundSphere on layer 0, renderOrder -1000, NaN-safe shader */}
-          <BackgroundSphereWithLayer />
+        {/* Lights — always rendered */}
+        <hemisphereLight
+          intensity={0.3}
+          color="#f7f7f7"
+          groundColor="#3a3a3a"
+        />
+        <KeyLightSync />
+        <directionalLight
+          name="SunLight"
+          position={[-10, 20, -15]}
+          intensity={Math.PI * 0.4}
+          color="#ffe4b5"
+        />
 
+        <OrbitControls makeDefault />
+
+        {/* REQ-2..5: Bloom pipeline — always active */}
+        <SelectiveBloomEffect />
+
+        {/* Model + HDRI inside Suspense — loaded async */}
+        <Suspense fallback={null}>
           <LandModel modelUrl={modelUrl} biome={biome} />
-
-          {/* Artist Workshop HDRI */}
           <Environment
             files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/artist_workshop_1k.hdr"
             environmentIntensity={1.0}
             blur={0}
           />
-
-          {/* Hemisphere Light */}
-          <hemisphereLight
-            intensity={0.3}
-            color="#f7f7f7"
-            groundColor="#3a3a3a"
-          />
-
-          {/* Camera-linked Directional Key Light */}
-          <KeyLightSync />
-
-          {/* Sunlight Directional Light */}
-          <directionalLight
-            name="SunLight"
-            position={[-10, 20, -15]}
-            intensity={Math.PI * 0.4}
-            color="#ffe4b5"
-          />
-
-          <OrbitControls makeDefault />
-
-          {/* REQ-2..5: Integrated Bloom + ACES + Sharpening + Glints pipeline */}
-          <SelectiveBloomEffect />
         </Suspense>
       </Canvas>
 

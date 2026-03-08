@@ -1,7 +1,8 @@
 import type {
-  DiscoverCacheResult,
   LootCache,
   ModifierInstance,
+  Result_1,
+  Result_3,
 } from "@/backend";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,27 +89,17 @@ export default function Discovery() {
 
     try {
       console.log("Discovering cache tier:", tier);
-      const result: DiscoverCacheResult = await actor.discoverLootCache(
-        BigInt(tier),
-      );
+      const result: Result_3 = await actor.discoverLootCache(BigInt(tier));
       console.log("Discovery result:", result);
 
-      if (result.__kind__ === "success") {
+      if (result.__kind__ === "ok") {
         toast.success(`Кэш уровня ${tier} обнаружен!`);
         await loadCaches();
         await new Promise((resolve) => setTimeout(resolve, 500));
         queryClient.invalidateQueries({ queryKey: ["landData"] });
         queryClient.invalidateQueries({ queryKey: ["tokenBalance"] });
-      } else if (result.__kind__ === "insufficientCharge") {
-        toast.error(
-          `Недостаточно заряда. Требуется: ${result.insufficientCharge.required}, доступно: ${result.insufficientCharge.current}`,
-        );
-      } else if (result.__kind__ === "insufficientTokens") {
-        toast.error(
-          `Недостаточно токенов. Требуется: ${formatTokenBalance(result.insufficientTokens.required)} CBR`,
-        );
-      } else if (result.__kind__ === "paymentFailed") {
-        toast.error(`Ошибка оплаты: ${result.paymentFailed}`);
+      } else {
+        toast.error(`Ошибка обнаружения кэша: ${result.err}`);
       }
     } catch (error: any) {
       console.error("Discovery error:", error);
@@ -130,12 +121,16 @@ export default function Discovery() {
 
     try {
       console.log("Processing cache:", cacheId);
-      const result: ModifierInstance = await actor.processCache(cacheId);
+      const result: Result_1 = await actor.processCache(cacheId);
       console.log("Process result:", result);
 
-      toast.success(
-        `Получен модификатор: ${result.modifierType} (Уровень ${result.rarity_tier})`,
-      );
+      if (result.__kind__ === "ok") {
+        toast.success(
+          `Получен модификатор: ${result.ok.modifierType} (Уровень ${result.ok.rarity_tier})`,
+        );
+      } else {
+        toast.error(`Ошибка открытия кэша: ${result.err}`);
+      }
       await loadCaches();
       queryClient.invalidateQueries({ queryKey: ["modifierInventory"] });
     } catch (error: any) {

@@ -282,11 +282,11 @@ export default function Marketplace() {
                       <SelectContent>
                         {myModifications?.map((mod) => (
                           <SelectItem
-                            key={mod.mod_id.toString()}
-                            value={mod.mod_id.toString()}
+                            key={mod.modifierInstanceId.toString()}
+                            value={mod.modifierInstanceId.toString()}
                           >
-                            Модификатор #{mod.mod_id.toString()} - Уровень{" "}
-                            {mod.rarity_tier.toString()}
+                            Модификатор #{mod.modifierInstanceId.toString()} -
+                            Уровень {mod.rarity_tier.toString()}
                           </SelectItem>
                         ))}
                       </SelectContent>

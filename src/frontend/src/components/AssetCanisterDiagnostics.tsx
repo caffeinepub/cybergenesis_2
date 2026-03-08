@@ -289,8 +289,10 @@ export default function AssetCanisterDiagnostics() {
 
       if (landActor) {
         try {
-          const response = await landActor.getAssetCanisterCycleBalance();
-          const data = JSON.parse(response);
+          const cycleResult = await landActor.getAssetCanisterCycleBalance();
+          const responseText =
+            cycleResult.__kind__ === "ok" ? cycleResult.ok : "";
+          const data = JSON.parse(responseText);
           const cycles = data.cycles || 0;
           const cyclesInT = (cycles / 1_000_000_000_000).toFixed(2);
           setCycleBalance(cyclesInT);

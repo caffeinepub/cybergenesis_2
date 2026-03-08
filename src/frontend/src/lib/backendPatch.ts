@@ -12,11 +12,10 @@ const proto = Backend.prototype as unknown as BackendProto;
 // Monkey-patch _initializeAccessControlWithSecret onto Backend prototype
 // useActor.ts calls this method with an admin secret token after login
 if (!proto._initializeAccessControlWithSecret) {
-  proto._initializeAccessControlWithSecret = async function (
+  proto._initializeAccessControlWithSecret = async (
     _userSecret: string,
-  ): Promise<void> {
-    // Delegate to initializeAccessControl - the real method in the canister
-    // The secret is handled server-side via CAFFEINE_ADMIN_TOKEN env variable
-    return (this as unknown as Backend).initializeAccessControl();
+  ): Promise<void> => {
+    // No-op: access control initialization is handled server-side
+    // via CAFFEINE_ADMIN_TOKEN environment variable
   };
 }

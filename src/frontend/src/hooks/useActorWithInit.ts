@@ -79,7 +79,7 @@ export function useActorWithInit(): UseActorReturn {
 
       // Test 4: Network status validation (additional health check)
       try {
-        const _landDataQuery = await actor.getLandDataQuery();
+        const _landDataQuery = await actor.getLandDataQuery(BigInt(0));
         console.log("[Data Poller] ✓ Network status validated");
         results.networkStatus = true;
       } catch (err) {

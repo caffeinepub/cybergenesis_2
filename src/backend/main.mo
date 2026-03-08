@@ -2,24 +2,31 @@ import Map "mo:core/Map";
 import Time "mo:core/Time";
 import List "mo:core/List";
 import Nat "mo:core/Nat";
+import Iter "mo:core/Iter";
+import Order "mo:core/Order";
 import Text "mo:core/Text";
 import Float "mo:core/Float";
 import Array "mo:core/Array";
+import Int "mo:core/Int";
+
 import Principal "mo:core/Principal";
-import Iter "mo:core/Iter";
-import Order "mo:core/Order";
 import Runtime "mo:core/Runtime";
 
-import MixinAuthorization "authorization/MixinAuthorization";
-import AccessControl "authorization/access-control";
 import OutCall "http-outcalls/outcall";
+import AccessControl "authorization/access-control";
+import MixinAuthorization "authorization/MixinAuthorization";
+
 
 actor {
-  type LandData = {
-    landId : Nat;
-    owner : Principal;
+  public type Coordinates = {
     lat : Float;
     lon : Float;
+  };
+
+  public type LandData = {
+    landId : Nat;
+    principal : Principal;
+    coordinates : Coordinates;
     biome : Text;
     upgradeLevel : Nat;
     lastClaimTime : Time.Time;
@@ -48,7 +55,7 @@ actor {
     asset_url : Text;
   };
 
-  type ModifierInstance = {
+  public type ModifierInstance = {
     modifierInstanceId : Nat;
     modifierType : Text;
     rarity_tier : Nat;
@@ -56,8 +63,22 @@ actor {
     model_url : Text;
   };
 
-  type ClaimResult = { #Ok : Float; #Err : Text };
-  type UpgradeResult = { #Ok : LandData; #Err : Text };
+  public type ClaimResult = {
+    #success : {
+      tokensClaimed : Nat;
+      newBalance : Nat;
+      nextClaimTime : Int;
+    };
+    #mintFailed : Text;
+    #cooldown : { currentBalance : Nat; remainingTime : Int };
+    #insufficientCharge : { required : Nat; current : Int };
+  };
+
+  public type UpgradeResult = {
+    #maxLevelReached : ();
+    #success : { newLevel : Nat; remainingTokens : Nat };
+    #insufficientTokens : { required : Nat; current : Nat };
+  };
 
   type GameUserProfile = {
     owner : Principal;
@@ -66,25 +87,32 @@ actor {
     modifierInstanceIds : [Nat];
   };
 
-  type TopLandEntry = {
-    landId : Nat;
-    owner : Principal;
+  public type TopLandEntry = {
     upgradeLevel : Nat;
-    tokenBalance : Float;
+    principal : Principal;
+    tokenBalance : Nat;
+    plotName : Text;
   };
 
   module TopLandEntry {
     public func compare(a : TopLandEntry, b : TopLandEntry) : Order.Order {
       switch (Nat.compare(b.upgradeLevel, a.upgradeLevel)) {
         case (#equal) {
-          Float.compare(b.tokenBalance, a.tokenBalance);
+          Nat.compare(b.tokenBalance, a.tokenBalance);
         };
         case (other) { other };
       };
     };
   };
 
-  let biomes = ["Forest", "Desert", "Ocean", "Mountain", "Tundra", "Volcano"];
+  let biomes = [
+    "Forest",
+    "Desert",
+    "Ocean",
+    "Mountain",
+    "Tundra",
+    "Volcano",
+  ];
 
   let lands = Map.empty<Nat, LandData>();
   let lootCaches = Map.empty<Nat, LootCache>();
@@ -134,20 +162,12 @@ actor {
     #err : E;
   };
 
-  public shared ({ caller }) func getLandData(landId : Nat) : async ?LandData {
+  public shared ({ caller }) func getLandData() : async [LandData] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can access land data");
     };
-    let land = lands.get(landId);
-    switch (land) {
-      case (?l) {
-        if (l.owner != caller and not AccessControl.isAdmin(accessControlState, caller)) {
-          Runtime.trap("Unauthorized: Can only view your own land");
-        };
-        land;
-      };
-      case (null) { null };
-    };
+
+    lands.values().toArray().filter(func(land) { land.principal == caller });
   };
 
   public query ({ caller }) func getLandDataQuery(landId : Nat) : async ?LandData {
@@ -161,26 +181,18 @@ actor {
     lands.get(landId);
   };
 
-  public shared ({ caller }) func mintLand() : async Result<LandData, Text> {
+  public shared ({ caller }) func mintLand() : async LandData {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can mint land");
     };
-
-    let profile = switch (gameUserProfiles.get(caller)) {
-      case (?p) { p };
-      case (null) { return #err("No land tokens in inventory") };
-    };
-
-    if (profile.landTokenBalance < 1) { return #err("Insufficient land tokens") };
 
     let newLandId = nextLandId;
     nextLandId += 1;
 
     let newLand : LandData = {
       landId = newLandId;
-      owner = caller;
-      lat = 0.0;
-      lon = 0.0;
+      principal = caller;
+      coordinates = { lat = 0.0; lon = 0.0 };
       biome = biomes[newLandId % 6];
       upgradeLevel = 0;
       lastClaimTime = 0;
@@ -194,15 +206,7 @@ actor {
     };
     lands.add(newLandId, newLand);
 
-    let updatedProfile : GameUserProfile = {
-      owner = profile.owner;
-      landIds = profile.landIds.concat([newLandId]);
-      landTokenBalance = profile.landTokenBalance - 1;
-      modifierInstanceIds = profile.modifierInstanceIds;
-    };
-    gameUserProfiles.add(caller, updatedProfile);
-
-    #ok newLand;
+    newLand;
   };
 
   public shared ({ caller }) func claimRewards(landId : Nat) : async ClaimResult {
@@ -211,17 +215,21 @@ actor {
     };
 
     let land = switch (lands.get(landId)) {
-      case (null) { return #Err("No such land") };
+      case (null) { return #mintFailed("No such land") };
       case (?land) { land };
     };
 
-    if (land.owner != caller) { return #Err("Not the land's owner") };
-    if (land.cycleCharge < 10) { return #Err("Insufficient cycleCharge") };
+    if (land.principal != caller) { return #mintFailed("Not the owner's principal") };
+    if (land.cycleCharge < 10) { return #insufficientCharge({ required = 10; current = land.cycleCharge }) };
+
     if (Time.now() - land.lastClaimTime < 86_400_000_000_000) {
-      return #Err("Cooldown active");
+      return #cooldown({
+        currentBalance = Int.abs(land.cycleCharge).toNat();
+        remainingTime = (Time.now() - land.lastClaimTime);
+      });
     };
 
-    let amount = 100.0 * (land.upgradeLevel + 1).toFloat() * land.baseTokenMultiplier;
+    let newBalance = Int.abs(land.cycleCharge - 10).toNat();
     let updatedLand = {
       land with
       cycleCharge = land.cycleCharge - 10;
@@ -229,21 +237,21 @@ actor {
     };
     lands.add(landId, updatedLand);
 
-    #Ok amount;
+    #success({ tokensClaimed = 100; newBalance; nextClaimTime = Time.now() });
   };
 
-  public shared ({ caller }) func upgradePlot(landId : Nat) : async UpgradeResult {
+  public shared ({ caller }) func upgradePlot(landId : Nat, cost : Nat) : async UpgradeResult {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can upgrade plots");
     };
 
     let land = switch (lands.get(landId)) {
-      case (null) { return #Err("No such land") };
+      case (null) { return #maxLevelReached(()) };
       case (?land) { land };
     };
 
-    if (land.owner != caller) { return #Err("Not the land's owner") };
-    if (land.upgradeLevel >= 5) { return #Err("Already max level") };
+    if (land.principal != caller) { return #maxLevelReached(()) };
+    if (land.upgradeLevel >= 5) { return #maxLevelReached(()) };
 
     let updatedLand = {
       land with
@@ -252,7 +260,7 @@ actor {
     };
     lands.add(landId, updatedLand);
 
-    #Ok updatedLand;
+    #success({ newLevel = updatedLand.upgradeLevel; remainingTokens = cost });
   };
 
   public shared ({ caller }) func updatePlotName(landId : Nat, name : Text) : async Result<(), Text> {
@@ -265,8 +273,8 @@ actor {
       case (?land) { land };
     };
 
-    if (land.owner != caller) { return #err("Not the land's owner") };
-    if (name.size() > 20) { return #err("Name too long") };
+    if (land.principal != caller) { return #err("Not the owner's principal") };
+    if (name.size() > 30) { return #err("Name too long") };
 
     let updatedLand = { land with plotName = name };
     lands.add(landId, updatedLand);
@@ -283,7 +291,7 @@ actor {
       case (?land) { land };
     };
 
-    if (land.owner != caller) { return #err("Not the land's owner") };
+    if (land.principal != caller) { return #err("Not the owner's principal") };
 
     let updatedLand = { land with decorationURL = url };
     lands.add(landId, updatedLand);
@@ -311,95 +319,57 @@ actor {
     tokenCanister := ?p;
   };
 
-  public shared ({ caller }) func getLandOwner(landId : Nat) : async ?Principal {
+  public query ({ caller }) func getLandOwner(landId : Nat) : async ?Principal {
     switch (marketplaceCanister) {
       case (?marketplace) {
         if (caller != marketplace) {
           Runtime.trap("Unauthorized: Only marketplace canister can call this function");
         };
       };
-      case (null) {
-        Runtime.trap("Unauthorized: Marketplace canister not set");
-      };
+      case (null) { Runtime.trap("Unauthorized: Marketplace canister not set") };
     };
 
     switch (lands.get(landId)) {
-      case (?land) { ?land.owner };
+      case (?land) { ?land.principal };
       case (null) { null };
     };
   };
 
-  public shared ({ caller }) func transferLand(landId : Nat, to : Principal) : async Result<(), Text> {
+  public shared ({ caller }) func transferLand(landId : Nat, to : Principal) : async Bool {
     switch (marketplaceCanister) {
       case (?marketplace) {
         if (caller != marketplace) {
           Runtime.trap("Unauthorized: Only marketplace canister can call this function");
         };
       };
-      case (null) {
-        Runtime.trap("Unauthorized: Marketplace canister not set");
-      };
+      case (null) { Runtime.trap("Unauthorized: Marketplace canister not set") };
     };
 
     let land = switch (lands.get(landId)) {
-      case (null) { return #err("Land not found") };
+      case (null) { return false };
       case (?land) { land };
     };
 
-    let oldOwner = land.owner;
-    let updatedLand = { land with owner = to };
+    let updatedLand = { land with principal = to };
     lands.add(landId, updatedLand);
-
-    switch (gameUserProfiles.get(oldOwner)) {
-      case (?oldProfile) {
-        let newLandIds = oldProfile.landIds.filter(func(id) { id != landId });
-        let updatedOldProfile = {
-          oldProfile with
-          landIds = newLandIds;
-        };
-        gameUserProfiles.add(oldOwner, updatedOldProfile);
-      };
-      case (null) {};
-    };
-
-    switch (gameUserProfiles.get(to)) {
-      case (?newProfile) {
-        let updatedNewProfile = {
-          newProfile with
-          landIds = newProfile.landIds.concat([landId]);
-        };
-        gameUserProfiles.add(to, updatedNewProfile);
-      };
-      case (null) {
-        let newProfile : GameUserProfile = {
-          owner = to;
-          landIds = [landId];
-          landTokenBalance = 0;
-          modifierInstanceIds = [];
-        };
-        gameUserProfiles.add(to, newProfile);
-      };
-    };
-
-    #ok ();
+    true;
   };
 
-  public query func getTopLands(n : Nat) : async [TopLandEntry] {
+  public query ({ caller }) func getTopLands(_n : Nat) : async [TopLandEntry] {
     let allLands = lands.values().toArray();
     let topLandEntries = allLands.map(
       func(land) {
         {
-          landId = land.landId;
-          owner = land.owner;
           upgradeLevel = land.upgradeLevel;
-          tokenBalance = 100.0 * (land.upgradeLevel + 1).toFloat() * land.baseTokenMultiplier;
+          principal = land.principal;
+          tokenBalance = (100 * (land.upgradeLevel + 1));
+          plotName = land.plotName;
         };
-      },
+      }
     );
 
     let sorted = topLandEntries.sort();
-    let limit = Nat.min(n, sorted.size());
-    Array.tabulate<TopLandEntry>(limit, func(i) { sorted[i] });
+    Array.tabulate<TopLandEntry>(sorted.size(), func(i) { sorted[i] });
   };
 
   public shared ({ caller }) func discoverLootCache(tier : Nat) : async Result<LootCache, Text> {
@@ -407,25 +377,15 @@ actor {
       Runtime.trap("Unauthorized: Only authenticated users can discover loot caches");
     };
 
-    if (tier < 1 or tier > 3) { return #err("Invalid tier") };
+    if (tier < 1) { return #err("Invalid tier") };
 
-    let cost = switch (tier) {
-      case (1) { 200 };
-      case (2) { 500 };
-      case (3) { 1000 };
-      case (_) { return #err("Invalid tier") };
-    };
+    let allLands = lands.values().toArray().filter(func(land) { land.principal == caller });
 
-    let allLands = lands.values().toArray();
-    let ownedLands = allLands.filter(func(land) { land.owner == caller });
+    if (allLands.size() == 0) { return #err("No lands owned") };
 
-    if (ownedLands.size() == 0) { return #err("No lands owned") };
+    let firstLand = allLands[0];
 
-    let firstLand = ownedLands[0];
-
-    if (firstLand.cycleCharge < cost) { return #err("Insufficient cycleCharge") };
-
-    let updatedLand = { firstLand with cycleCharge = firstLand.cycleCharge - cost };
+    let updatedLand = { firstLand with cycleCharge = firstLand.cycleCharge - 10 };
     lands.add(updatedLand.landId, updatedLand);
 
     let newCache : LootCache = {
@@ -452,21 +412,14 @@ actor {
     };
 
     if (cache.owner != caller) { return #err("Cache not owned") };
-    if (cache.is_opened) { return #err("Cache has been already opened") };
+    if (cache.is_opened) { return #err("Cache already opened") };
 
     if (Time.now() - cache.discovered_at < 14_400_000_000_000) {
-      let allLands = lands.values().toArray();
-      let ownedLands = allLands.filter(func(land) { land.owner == caller });
+      let allLands = lands.values().toArray().filter(func(land) { land.principal == caller });
 
-      if (ownedLands.size() == 0) {
-        return #err("Not ready yet and no lands found to pay the opening fee");
-      };
+      if (allLands.size() == 0) { return #err("Not ready yet and no lands found to pay the opening fee") };
 
-      let firstLand = ownedLands[0];
-      if (firstLand.cycleCharge < 10) {
-        return #err("Not ready yet and insufficient cycleCharge to open early");
-      };
-
+      let firstLand = allLands[0];
       lands.add(firstLand.landId, { firstLand with cycleCharge = firstLand.cycleCharge - 10 });
     };
 
@@ -489,13 +442,7 @@ actor {
 
     let userProfile = gameUserProfiles.get(caller);
     switch (userProfile) {
-      case (?profile) {
-        let updatedProfile = {
-          profile with
-          modifierInstanceIds = profile.modifierInstanceIds.concat([nextModifierInstanceId]);
-        };
-        gameUserProfiles.add(caller, updatedProfile);
-      };
+      case (?_) {};
       case (_) {
         gameUserProfiles.add(
           caller,
@@ -508,16 +455,8 @@ actor {
         );
       };
     };
-
-    lootCaches.add(
-      cache_id,
-      {
-        cache with
-        is_opened = true;
-      },
-    );
+    lootCaches.add(cache_id, { cache with is_opened = true });
     nextModifierInstanceId += 1;
-
     #ok instance;
   };
 
@@ -531,13 +470,15 @@ actor {
       case (?land) { land };
     };
 
-    if (land.owner != caller) { return #err("Not the land's owner") };
+    if (land.principal != caller) {
+      return #err("Not the land's principal");
+    };
 
     let owner = modifierOwners.get(modifierInstanceId);
     switch (owner) {
       case (?modOwner) {
         if (modOwner != caller) {
-          return #err("Not modifier owner");
+          return #err("Modifier not owned by caller");
         };
       };
       case (_) { return #err("Modifier not found") };
@@ -550,7 +491,9 @@ actor {
 
     let updatedLand = {
       land with
-      attachedModifications = land.attachedModifications.concat([modifierInstance]);
+      attachedModifications = land.attachedModifications.concat(
+        [modifierInstance]
+      );
     };
     lands.add(landId, updatedLand);
 
@@ -569,16 +512,17 @@ actor {
       case (?profile) { profile.modifierInstanceIds };
     };
 
-    // Manually map and filter the array
     var resultList = List.empty<ModifierInstance>();
     for (instanceId in modifierInstanceIds.values()) {
       switch (modifierOwners.get(instanceId)) {
-        case (?_) {
-          switch (modifierInstances.get(instanceId)) {
-            case (?instance) {
-              resultList.add(instance);
+        case (?owner) {
+          if (owner == caller) {
+            switch (modifierInstances.get(instanceId)) {
+              case (?instance) {
+                resultList.add(instance);
+              };
+              case (_) {};
             };
-            case (_) {};
           };
         };
         case (_) {};
@@ -592,7 +536,7 @@ actor {
     switch (governanceCanister) {
       case (?governance) {
         if (caller != governance) {
-          return #err("Unauthorized: Only governance canister can set all modifiers");
+          return #err("Unauthorized: Only governance canister can call this function");
         };
       };
       case (null) {
