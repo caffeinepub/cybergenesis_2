@@ -18,7 +18,7 @@ import type { LootDropEntry } from "@/lib/fakeCbr";
 import { formatTokenBalance } from "@/lib/tokenUtils";
 import { useQueryClient } from "@tanstack/react-query";
 import { Clock, Gift, Loader2, Package, Sparkles, Zap } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 function getModifierAssetUrl(modifierName: string): string {
@@ -123,6 +123,7 @@ export default function Discovery() {
     null,
   );
   const [lootLog, setLootLog] = useState<LootDropEntry[]>([]);
+  const [simulatedCharge, setSimulatedCharge] = useState<number | null>(null);
 
   useEffect(() => {
     fakeCbr.migrateLootLog();
@@ -130,6 +131,20 @@ export default function Discovery() {
   }, []);
 
   const selectedLand = lands?.[0];
+
+  // Keep simulated charge in sync (same as LandDashboard)
+  useEffect(() => {
+    if (!selectedLand) return;
+    const landId = selectedLand.landId.toString();
+    const cap = Number(selectedLand.chargeCap);
+    const backend = Number(selectedLand.cycleCharge);
+    const initial = fakeCbr.getSimulatedCharge(landId, backend, cap);
+    setSimulatedCharge(initial);
+    const interval = setInterval(() => {
+      setSimulatedCharge(fakeCbr.getSimulatedCharge(landId, backend, cap));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [selectedLand]);
 
   React.useEffect(() => {
     if (actor) {
@@ -195,9 +210,10 @@ export default function Discovery() {
       );
       return;
     }
-    if (selectedLand.cycleCharge < cost.charge) {
+    const currentCharge = simulatedCharge ?? Number(selectedLand.cycleCharge);
+    if (currentCharge < cost.charge) {
       toast.error(
-        `Недостаточно заряда. Требуется: ${cost.charge}, доступно: ${selectedLand.cycleCharge}`,
+        `Недостаточно заряда. Требуется: ${cost.charge}, доступно: ${Math.floor(currentCharge)}`,
       );
       return;
     }
@@ -205,7 +221,7 @@ export default function Discovery() {
     setDiscoveringTier(tier);
     try {
       const result: Result_3 = await actor.discoverLootCache(BigInt(tier));
-      if ("ok" in result) {
+      if (result.__kind__ === "ok") {
         toast.success(`Кэш уровня ${tier} обнаружен!`);
         await loadCaches();
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -213,7 +229,7 @@ export default function Discovery() {
         queryClient.invalidateQueries({ queryKey: ["tokenBalance"] });
       } else {
         toast.error(
-          `Ошибка обнаружения кэша: ${(result as { err: string }).err}`,
+          `Ошибка обнаружения кэша: ${(result as { __kind__: string; err: string }).err}`,
         );
       }
     } catch (error: any) {
@@ -397,9 +413,9 @@ export default function Discovery() {
   return (
     <div className="space-y-6">
       {/* CBR Balance Card */}
-      <Card className="bg-black/40 backdrop-blur-md border-[#00ff41]/30 shadow-[0_0_15px_rgba(0,255,65,0.3)]">
+      <Card className="glassmorphism neon-border box-glow-green">
         <CardHeader>
-          <CardTitle className="text-[#00ff41] flex items-center gap-2">
+          <CardTitle className="text-[#00ff41] flex items-center gap-2 font-orbitron text-glow-green">
             <Zap className="w-5 h-5" />
             БАЛАНС CBR
           </CardTitle>
@@ -429,33 +445,32 @@ export default function Discovery() {
                 {formatTokenBalance(tokenBalance || BigInt(0))} CBR
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button
+                <button
+                  type="button"
                   onClick={() => debugBalanceMutation.mutateAsync()}
                   disabled={debugBalanceMutation.isPending}
-                  size="sm"
-                  variant="ghost"
-                  className="text-[#00d4ff] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"
+                  className="px-3 py-1 rounded glassmorphism text-[#00ffff] hover:bg-[#00ffff]/10 transition-all duration-300 text-sm font-jetbrains border border-[#00ffff]/30"
                 >
                   Обновить баланс
-                </Button>
-                <Button
+                </button>
+                <button
+                  type="button"
                   data-ocid="discovery.mint_cbr.primary_button"
                   onClick={() =>
                     mintFakeCbrMutation.mutate(BigInt(100_000_000_000))
                   }
                   disabled={mintFakeCbrMutation.isPending}
-                  size="sm"
-                  className="bg-[#00ff41]/20 hover:bg-[#00ff41]/30 text-[#00ff41] border border-[#00ff41]/40 font-bold"
+                  className="px-3 py-1 rounded btn-gradient-green text-black font-bold font-orbitron text-sm disabled:opacity-50"
                 >
                   {mintFakeCbrMutation.isPending ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
                       Минтинг...
                     </>
                   ) : (
                     "Получить 100 CBR"
                   )}
-                </Button>
+                </button>
               </div>
             </div>
           )}
@@ -464,66 +479,78 @@ export default function Discovery() {
 
       {/* Discovery Tiers */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[1, 2, 3].map((tier) => (
-          <Card
-            key={tier}
-            className={`bg-black/40 backdrop-blur-md border ${getTierColor(tier)} shadow-[0_0_15px_rgba(0,255,65,0.2)]`}
-          >
-            <CardHeader>
-              <CardTitle className={getTierColor(tier).split(" ")[0]}>
-                {getTierName(tier)} Кэш
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <p className="text-white/70 text-sm">
-                  Стоимость:{" "}
-                  <span className="text-[#00ff41] font-bold">
-                    {tier === 1 ? "100" : tier === 2 ? "250" : "500"} CBR
-                  </span>
-                </p>
-                <p className="text-white/70 text-sm">
-                  Заряд:{" "}
-                  <span className="text-[#00d4ff] font-bold">
-                    {tier === 1 ? "200" : tier === 2 ? "500" : "1000"}
-                  </span>
-                </p>
-                <p className="text-white/70 text-sm">
-                  Шанс LandToken:{" "}
-                  <span className="text-purple-400 font-bold">
-                    {tier === 1 ? "0.05%" : tier === 2 ? "0.2%" : "0.5%"}
-                  </span>
-                </p>
-              </div>
-              <Button
-                onClick={() => handleDiscoverCache(tier)}
-                disabled={discoveringTier !== null || !selectedLand}
-                className={`w-full ${
-                  tier === 1
-                    ? "bg-gray-600 hover:bg-gray-700"
-                    : tier === 2
-                      ? "bg-blue-600 hover:bg-blue-700"
-                      : "bg-purple-600 hover:bg-purple-700"
-                } text-white font-bold`}
-              >
-                {discoveringTier === tier ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    Обнаружение...
-                  </>
-                ) : (
-                  "ОБНАРУЖИТЬ КЭШ"
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+        {[1, 2, 3].map((tier) => {
+          const tierGlowClass =
+            tier === 1
+              ? "box-glow-cyan neon-border"
+              : tier === 2
+                ? "box-glow-purple neon-border"
+                : "neon-border";
+          const tierTitleClass =
+            tier === 1
+              ? "text-[#00ffff] text-glow-cyan"
+              : tier === 2
+                ? "text-[#9933ff] text-glow-purple"
+                : "text-yellow-400";
+          const tierBtnClass =
+            tier === 1
+              ? "btn-gradient-cyan"
+              : tier === 2
+                ? "btn-gradient-purple"
+                : "btn-gradient-green";
+          return (
+            <Card key={tier} className={`glassmorphism ${tierGlowClass}`}>
+              <CardHeader>
+                <CardTitle className={`font-orbitron ${tierTitleClass}`}>
+                  {getTierName(tier)} Кэш
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-white/70 text-sm font-jetbrains">
+                    Стоимость:{" "}
+                    <span className="text-[#00ff41] font-bold">
+                      {tier === 1 ? "100" : tier === 2 ? "250" : "500"} CBR
+                    </span>
+                  </p>
+                  <p className="text-white/70 text-sm font-jetbrains">
+                    Заряд:{" "}
+                    <span className="text-[#00d4ff] font-bold">
+                      {tier === 1 ? "200" : tier === 2 ? "500" : "1000"}
+                    </span>
+                  </p>
+                  <p className="text-white/70 text-sm font-jetbrains">
+                    Шанс LandToken:{" "}
+                    <span className="text-purple-400 font-bold">
+                      {tier === 1 ? "0.05%" : tier === 2 ? "0.2%" : "0.5%"}
+                    </span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDiscoverCache(tier)}
+                  disabled={discoveringTier !== null || !selectedLand}
+                  className={`w-full px-4 py-3 rounded-lg ${tierBtnClass} text-black font-bold font-orbitron disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300`}
+                >
+                  {discoveringTier === tier ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
+                      Обнаружение...
+                    </>
+                  ) : (
+                    "ОБНАРУЖИТЬ КЭШ"
+                  )}
+                </button>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Loot Drop Log */}
-      <Card className="bg-black/40 backdrop-blur-md border-[#9933ff]/30 shadow-[0_0_15px_rgba(153,51,255,0.3)]">
+      <Card className="glassmorphism neon-border box-glow-purple">
         <CardHeader>
-          <CardTitle className="text-[#9933ff] flex items-center gap-2">
+          <CardTitle className="text-[#9933ff] flex items-center gap-2 font-orbitron text-glow-purple">
             <Sparkles className="w-5 h-5" />
             ПОЛУЧЕННЫЙ ЛУТ
           </CardTitle>
@@ -585,9 +612,9 @@ export default function Discovery() {
       </Card>
 
       {/* My Caches */}
-      <Card className="bg-black/40 backdrop-blur-md border-[#00d4ff]/30 shadow-[0_0_15px_rgba(0,212,255,0.3)]">
+      <Card className="glassmorphism neon-border box-glow-cyan">
         <CardHeader>
-          <CardTitle className="text-[#00d4ff] flex items-center gap-2">
+          <CardTitle className="text-[#00ffff] flex items-center gap-2 font-orbitron text-glow-cyan">
             <Package className="w-5 h-5" />
             МОИ КЭШИ
           </CardTitle>
@@ -635,24 +662,24 @@ export default function Discovery() {
                       {cache.is_opened ? (
                         <span className="text-green-400 text-sm">✓ Открыт</span>
                       ) : (
-                        <Button
+                        <button
+                          type="button"
                           onClick={() => handleProcessCache(cache.cache_id)}
                           disabled={processingCacheId !== null}
-                          size="sm"
-                          className="bg-[#00ff41] hover:bg-[#00ff41]/80 text-black font-bold"
+                          className="px-4 py-2 rounded-lg btn-gradient-green text-black font-bold font-orbitron text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {processingCacheId === cache.cache_id ? (
                             <>
-                              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                              <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
                               Открытие...
                             </>
                           ) : (
                             <>
-                              <Gift className="w-4 h-4 mr-2" />
+                              <Gift className="w-4 h-4 mr-2 inline" />
                               ОТКРЫТЬ
                             </>
                           )}
-                        </Button>
+                        </button>
                       )}
                     </div>
                   </div>

@@ -64,6 +64,17 @@ export default function LandDashboard({
     setLocalModifiers(fakeCbr.getLocalModifiers());
   };
 
+  // Periodically refresh inventory to pick up new items from cache openings
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshInventory is stable, intentionally omitted
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBoosterStacks(fakeCbr.getBoosters());
+      setCrystalStacks(fakeCbr.getCrystals());
+      setLocalModifiers(fakeCbr.getLocalModifiers());
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
   const selectedLand: LandData | undefined = lands?.[selectedLandIndex];
 
   const landIdForCharge = selectedLand?.landId;

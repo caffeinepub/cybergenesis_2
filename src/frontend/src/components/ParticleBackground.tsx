@@ -22,16 +22,15 @@ export default function ParticleBackground() {
       y: Math.random() * window.innerHeight,
       vx: (Math.random() - 0.5) * 0.4,
       vy: (Math.random() - 0.5) * 0.4,
-      size: Math.random() * 4 + 2,
+      size: Math.random() * 1.5 + 1,
       color: ["#00f3ff", "#ff00ff", "#00ffaa", "#9d00ff"][
         Math.floor(Math.random() * 4)
       ],
     }));
 
     const animate = () => {
-      // Эффект шлейфа (Tail)
-      ctx.fillStyle = "rgba(1, 1, 3, 0.1)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Полностью прозрачный фон — CosmicBackground виден сквозь него
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       for (const p of particles) {
         p.x += p.vx;
@@ -42,15 +41,17 @@ export default function ParticleBackground() {
 
         // Рисуем частицу со «свечением» через два слоя
         ctx.fillStyle = p.color;
-        ctx.globalAlpha = 0.3;
+        ctx.globalAlpha = 0.25;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size * 2, 0, Math.PI * 2); // Внешнее мягкое кольцо
         ctx.fill();
 
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = 0.85;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); // Яркое ядро
         ctx.fill();
+
+        ctx.globalAlpha = 1;
       }
 
       animationFrameRef.current = requestAnimationFrame(animate);

@@ -1,280 +1,253 @@
-import type { LandData } from "@/backend";
 import { useQuery } from "@tanstack/react-query";
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { LandData } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
-interface MapViewProps {
-  landData: LandData;
-  onClose: () => void;
-}
-
 declare global {
   interface Window {
-    maptalks?: any;
+    L: any;
   }
 }
 
-const MapView: React.FC<MapViewProps> = ({ landData, onClose }) => {
+const MAP_SIZE = 2560;
+const VORTEX_CENTER: [number, number] = [1280, 1280];
+const RAW_MAP_URL =
+  "https://raw.githubusercontent.com/dobr312/cyberland/main/CyberMap/IMG_0133.webp";
+
+const getBiomeColor = (biome: string) => {
+  const colors: Record<string, string> = {
+    MYTHIC_VOID: "#9933FF",
+    MYTHIC_AETHER: "#9933FF",
+    VOLCANIC_CRAG: "#ff3300",
+    DESERT_DUNE: "#FF8800",
+    FOREST_VALLEY: "#00ff41",
+    SNOW_PEAK: "#ffffff",
+  };
+  return colors[biome] || "#00aaff";
+};
+
+const MapView = ({
+  onClose,
+  landData: _landData,
+}: { onClose: () => void; landData?: LandData | null }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const [maptalksSdkLoaded, setMaptalksSdkLoaded] = useState(false);
+  const mapRef = useRef<any>(null);
+  const [isEngineReady, setIsEngineReady] = useState(false);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
   const { actor } = useActor();
   const { identity } = useInternetIdentity();
+  const principalId = identity?.getPrincipal().toString();
 
-  // Fetch all lands for the map
-  const { data: lands } = useQuery<LandData[]>({
+  const { data: lands } = useQuery({
     queryKey: ["landData"],
-    queryFn: async () => {
-      if (!actor) throw new Error("Actor not initialized");
-      return actor.getLandData();
-    },
+    queryFn: () => actor?.getLandData(),
     enabled: !!actor,
   });
 
-  // Load Maptalks.js via CDN
+  // 1. ENGINE LOADER & MOBILE SCROLL LOCK
   useEffect(() => {
-    if (window.maptalks) {
-      setMaptalksSdkLoaded(true);
-      return;
+    document.body.style.overflow = "hidden";
+
+    if (window.L) {
+      setIsEngineReady(true);
+    } else {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(link);
+
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.async = true;
+      document.head.appendChild(script);
+      script.onload = () => setIsEngineReady(true);
     }
 
-    const cssLink = document.createElement("link");
-    cssLink.rel = "stylesheet";
-    cssLink.href =
-      "https://cdn.jsdelivr.net/npm/maptalks@1.0.0-rc.28/dist/maptalks.css";
-    document.head.appendChild(cssLink);
-
-    const script = document.createElement("script");
-    script.src =
-      "https://cdn.jsdelivr.net/npm/maptalks@1.0.0-rc.28/dist/maptalks.min.js";
-    script.async = false;
-    script.onload = () => {
-      setTimeout(() => {
-        if (window.maptalks) setMaptalksSdkLoaded(true);
-      }, 100);
+    return () => {
+      document.body.style.overflow = "unset";
     };
-    script.onerror = () => console.error("Failed to load Maptalks.js");
-    document.head.appendChild(script);
   }, []);
 
-  // Biome → neon color
-  const getBiomeColor = (biome: string): string => {
-    switch (biome) {
-      case "MYTHIC_VOID":
-        return "#9933FF";
-      case "MYTHIC_AETHER":
-        return "#00FFFF";
-      case "ISLAND_ARCHIPELAGO":
-        return "#00aaff";
-      case "FOREST_VALLEY":
-        return "#00ff41";
-      case "SNOW_PEAK":
-        return "#ffffff";
-      case "DESERT_DUNE":
-        return "#FF8800";
-      case "VOLCANIC_CRAG":
-        return "#ff3300";
-      default:
-        return "#ffffff";
-    }
-  };
+  // 2. DETERMINISTIC COORDINATE GENERATOR
+  const getPointInBiome = useCallback((landId: number, biome: string) => {
+    const seed = landId * 1337.42;
+    const pseudoRandom = (offset: number) => Math.abs(Math.sin(seed + offset));
 
-  // Main map initialization — re-runs only when SDK loads or lands data arrives
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+    const regions: Record<
+      string,
+      { x: [number, number]; y: [number, number] }
+    > = {
+      MYTHIC_VOID: { x: [1050, 1510], y: [1050, 1510] },
+      MYTHIC_AETHER: { x: [1050, 1510], y: [1050, 1510] },
+      VOLCANIC_CRAG: { x: [1800, 2400], y: [400, 1100] },
+      DESERT_DUNE: { x: [1600, 2450], y: [1600, 2400] },
+      FOREST_VALLEY: { x: [400, 1000], y: [1200, 1800] },
+      SNOW_PEAK: { x: [200, 1100], y: [300, 900] },
+      ISLAND_ARCHIPELAGO: { x: [300, 1200], y: [1900, 2450] },
+    };
+
+    const zone = regions[biome] || regions.MYTHIC_VOID;
+    const x = zone.x[0] + pseudoRandom(1) * (zone.x[1] - zone.x[0]);
+    const y = zone.y[0] + pseudoRandom(2) * (zone.y[1] - zone.y[0]);
+
+    return [y, x];
+  }, []);
+
+  // 3. MAP INITIALIZATION
   useEffect(() => {
     if (
-      !maptalksSdkLoaded ||
-      !window.maptalks ||
+      !isEngineReady ||
       !mapContainerRef.current ||
-      !lands
-    ) {
+      mapRef.current ||
+      !window.L
+    )
       return;
-    }
 
-    const container = mapContainerRef.current;
-
-    // Initialize map — pass the DOM element directly
-    const map = new window.maptalks.Map(container, {
-      center: [1028, -1028],
-      zoom: 2,
-      spatialReference: {
-        projection: "identity",
-        resolutions: [32, 16, 8, 4, 2, 1, 0.5],
-        fullExtent: { top: 5000, left: -5000, bottom: -5000, right: 5000 },
-      },
-      dragPitch: false,
-      dragRotate: false,
-      pitchWithRotate: false,
-      dragRotatePitch: false,
-      touchZoomRotate: false,
-      doubleClickZoom: false,
-      attribution: false,
-      baseLayer: new window.maptalks.ImageLayer("base", [
-        {
-          url: "https://raw.githubusercontent.com/dobr312/cyberland/main/CyberMap/IMG_0133.webp",
-          extent: [0, -2056, 2056, 0],
-        },
-      ]),
+    const L = window.L;
+    const map = L.map(mapContainerRef.current, {
+      crs: L.CRS.Simple,
+      minZoom: -1,
+      maxZoom: 3,
+      zoomControl: false,
+      attributionControl: false,
     });
+    mapRef.current = map;
 
-    // Cover effect + setMaxExtent + UIMarkers + 600ms animateTo
-    map.on("load", () => {
-      const extent = new window.maptalks.Extent(0, -2056, 2056, 0);
-      map.setMaxExtent(extent);
+    const bounds: [number, number][] = [
+      [0, 0],
+      [MAP_SIZE, MAP_SIZE],
+    ];
+    L.imageOverlay(RAW_MAP_URL, bounds).addTo(map);
+    map.setMaxBounds(bounds);
 
-      // Math.max for Cover effect — fills the viewport without letterboxing
-      const scale = Math.max(
-        container.clientWidth / 2056,
-        container.clientHeight / 2056,
-      );
-      const minZoom = Math.log2(32 / (2056 / (2056 * scale)));
-      map.setMinZoom(minZoom);
-      map.setZoom(minZoom);
-      map.fitExtent(extent, 0);
-
-      // Neon beam UIMarkers — 100% engine-rendered, zero React JSX
-      const currentUserPrincipal = identity?.getPrincipal().toString();
+    if (lands) {
+      let myFirstLandCoords: number[] | null = null;
 
       for (const land of lands) {
-        const isOwner = land.principal.toString() === currentUserPrincipal;
-        const biomeColor = getBiomeColor(land.biome);
+        const coords = getPointInBiome(Number(land.landId), land.biome);
+        const isOwner = land.principal?.toString() === principalId;
 
-        const x = 1028 + (land.coordinates.lon / 180) * 1028;
-        const y = 1028 + (land.coordinates.lat / 90) * 1028;
+        if (isOwner && !myFirstLandCoords) myFirstLandCoords = coords;
 
-        const beamWidth = isOwner ? 3 : 1;
-        const beamHeight = isOwner ? 180 : 120;
-        const opacity = isOwner ? 1.0 : 0.35;
-        const glowSpread = isOwner ? 12 : 6;
+        const color = isOwner ? getBiomeColor(land.biome) : "#ffffff";
+        const weight = isOwner ? 3 : 0.4;
+        const opacity = isOwner ? 0.9 : 0.25;
 
-        const htmlString = `
-          <div style="
-            width: ${beamWidth}px;
-            height: ${beamHeight}px;
-            background: linear-gradient(to top, ${biomeColor}ff, ${biomeColor}88, transparent);
-            opacity: ${opacity};
-            box-shadow: 0 0 ${glowSpread}px ${biomeColor}, 0 0 ${glowSpread * 2}px ${biomeColor};
-            pointer-events: none;
-            border-radius: 1px;
-          "></div>
-        `;
-
-        new window.maptalks.ui.UIMarker([Math.floor(x), Math.floor(-y)], {
-          content: htmlString,
-          verticalAlignment: "middle",
-          horizontalAlignment: "middle",
-          eventsPropagation: false,
+        L.polyline([VORTEX_CENTER, coords], {
+          color,
+          weight,
+          opacity,
+          className: isOwner
+            ? `beam-owned-${land.biome.toLowerCase()}`
+            : "beam-other",
         }).addTo(map);
       }
 
-      // 600ms delayed drone animation to target land
-      const lon = landData.coordinates.lon;
-      const lat = landData.coordinates.lat;
-      const targetX = Math.floor(1028 + (lon / 180) * 1028);
-      const targetY = Math.floor(-(1028 + (lat / 90) * 1028));
+      if (myFirstLandCoords) {
+        map.flyTo(myFirstLandCoords, 2, { duration: 2 });
+      } else {
+        map.fitBounds(bounds);
+      }
+      setIsDataLoaded(true);
+    }
 
-      setTimeout(() => {
-        map.animateTo(
-          {
-            center: [targetX, targetY],
-            zoom: minZoom + 1.5,
-          },
-          {
-            duration: 3500,
-            easing: "out",
-          },
-        );
-      }, 600);
-    });
+    setTimeout(() => {
+      if (mapRef.current) mapRef.current.invalidateSize();
+    }, 300);
 
-    // Cleanup on unmount
     return () => {
-      if (map) map.remove();
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [maptalksSdkLoaded, lands]);
+  }, [isEngineReady, lands, principalId, getPointInBiome]);
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        width: "100vw",
-        height: "100vh",
-        zIndex: 9999,
-        background: "#000",
-        overflow: "hidden",
-        display: "block",
-      }}
-    >
-      {/* Loading overlay — shown until SDK and data are ready */}
-      {(!maptalksSdkLoaded || !lands) && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            zIndex: 10002,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "#000",
-          }}
-        >
-          <div
-            style={{
-              color: "#00ffff",
-              fontSize: "20px",
-              fontWeight: "bold",
-              letterSpacing: "0.1em",
-              animation: "pulse 1.5s ease-in-out infinite",
-            }}
-          >
-            {!maptalksSdkLoaded
-              ? "Загрузка библиотеки Maptalks..."
-              : "Загрузка данных земель..."}
+    <div style={containerStyle}>
+      {(!isEngineReady || !isDataLoaded) && (
+        <div style={loadingOverlayStyle}>
+          <div className="cyber-loader">
+            <div className="loader-text">INITIALIZING CYBERMAP...</div>
+            <div className="loader-bar" />
           </div>
         </div>
       )}
 
-      {/* Map Container — MUST have 100% of the fixed parent; touchAction: auto for mobile */}
       <div
         ref={mapContainerRef}
-        style={{
-          width: "100%",
-          height: "100%",
-          position: "absolute",
-          top: 0,
-          left: 0,
-          touchAction: "auto",
-        }}
+        style={{ width: "100%", height: "100%", background: "#000" }}
       />
 
-      {/* Close Button */}
-      <button
-        type="button"
-        onClick={onClose}
-        style={{
-          position: "absolute",
-          top: "env(safe-area-inset-top, 20px)",
-          right: "20px",
-          zIndex: 10001,
-          padding: "12px 24px",
-          background: "rgba(0,0,0,0.7)",
-          color: "#fff",
-          border: "1px solid rgba(255,255,255,0.3)",
-          borderRadius: "12px",
-          backdropFilter: "blur(10px)",
-          fontSize: "18px",
-          fontWeight: "bold",
-          cursor: "pointer",
-        }}
-      >
-        ✕
+      <button type="button" onClick={onClose} style={closeButtonStyle}>
+        ✕ EXIT TERMINAL
       </button>
+
+      <style>{`
+        .leaflet-container { background: #000 !important; cursor: crosshair; outline: none; }
+        .beam-other { filter: none; pointer-events: none; stroke-dasharray: 2, 4; }
+        ${[
+          "MYTHIC_VOID",
+          "MYTHIC_AETHER",
+          "VOLCANIC_CRAG",
+          "DESERT_DUNE",
+          "FOREST_VALLEY",
+          "SNOW_PEAK",
+        ]
+          .map(
+            (b) =>
+              `.beam-owned-${b.toLowerCase()} { filter: drop-shadow(0 0 10px ${getBiomeColor(b)}); z-index: 1000 !important; }`,
+          )
+          .join("")}
+        .cyber-loader { text-align: center; }
+        .loader-text { color: #00ff41; font-family: monospace; font-size: 20px; letter-spacing: 4px; animation: blink 1s infinite; }
+        .loader-bar { width: 250px; height: 2px; background: #00ff41; box-shadow: 0 0 15px #00ff41; margin: 10px auto; animation: slide 2s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes slide { 0% { transform: scaleX(0); } 50% { transform: scaleX(1); } 100% { transform: scaleX(0); } }
+      `}</style>
     </div>
   );
+};
+
+const containerStyle: React.CSSProperties = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "100vw",
+  height: "100dvh",
+  zIndex: 9999,
+  background: "#000",
+  overflow: "hidden",
+  touchAction: "none",
+};
+
+const loadingOverlayStyle: React.CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  zIndex: 10005,
+  background: "#000",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexDirection: "column",
+};
+
+const closeButtonStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "30px",
+  right: "30px",
+  zIndex: 10001,
+  padding: "12px 24px",
+  background: "rgba(0,255,65,0.1)",
+  color: "#00ff41",
+  border: "1px solid #00ff41",
+  borderRadius: "4px",
+  cursor: "pointer",
+  fontFamily: "monospace",
+  textShadow: "0 0 5px #00ff41",
+  backdropFilter: "blur(10px)",
 };
 
 export default MapView;

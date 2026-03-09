@@ -58,25 +58,62 @@ const BIOME_MODEL_MAP: Record<string, string> = {
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_AETHER.glb",
 };
 
-// Composite shader: blends bloom render target onto the final scene
+// Composite shader: ACES Tonemapping + Luma-Sharpen + Glints
 const COMPOSITE_SHADER = {
   uniforms: {
     baseTexture: { value: null as THREE.Texture | null },
     bloomTexture: { value: null as THREE.Texture | null },
+    resolution: { value: new THREE.Vector2() },
+    exposure: { value: 1.0 },
   },
   vertexShader: `
     varying vec2 vUv;
     void main() {
       vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      gl_Position = vec4(position, 1.0);
     }
   `,
   fragmentShader: `
     uniform sampler2D baseTexture;
     uniform sampler2D bloomTexture;
+    uniform vec2 resolution;
+    uniform float exposure;
     varying vec2 vUv;
+
+    float getLuma(vec3 v) { return dot(v, vec3(0.299, 0.587, 0.114)); }
+
+    vec3 toneMapACES(vec3 color) {
+        float tA = 2.51; float tB = 0.03; float tC = 2.43;
+        float tD = 0.59; float tE = 0.14;
+        vec3 x = color * exposure;
+        return clamp((x * (tA * x + tB)) / (x * (tC * x + tD) + tE), 0.0, 1.0);
+    }
+
     void main() {
-      gl_FragColor = texture2D(baseTexture, vUv) + vec4(1.0) * texture2D(bloomTexture, vUv);
+        vec2 texel = 1.0 / max(resolution, vec2(1.0));
+        vec3 center = texture2D(baseTexture, vUv).rgb;
+
+        // 1. Luma-based Sharpen
+        float lumaC = getLuma(center);
+        float lumaL = getLuma(texture2D(baseTexture, vUv - vec2(texel.x, 0.0)).rgb);
+        float lumaR = getLuma(texture2D(baseTexture, vUv + vec2(texel.x, 0.0)).rgb);
+        float lumaU = getLuma(texture2D(baseTexture, vUv - vec2(0.0, texel.y)).rgb);
+        float lumaD = getLuma(texture2D(baseTexture, vUv + vec2(0.0, texel.y)).rgb);
+
+        float sharpness = 0.18;
+        float edge = 4.0 * lumaC - lumaL - lumaR - lumaU - lumaD;
+        vec3 baseRGB = center + (edge * sharpness);
+
+        // 2. Bloom & Glints
+        vec3 bloomRGB = texture2D(bloomTexture, vUv).rgb;
+        float glintThreshold = 2.5;
+        float glintStrength = 3.0;
+        float highlight = max(0.0, getLuma(baseRGB) - glintThreshold) * glintStrength;
+        vec3 finalBloom = bloomRGB + (baseRGB * highlight);
+
+        // 3. Composite & ToneMapping
+        vec3 color = baseRGB + finalBloom;
+        gl_FragColor = vec4(toneMapACES(color), 1.0);
     }
   `,
 };
@@ -256,10 +293,13 @@ function SelectiveBloomEffect() {
 
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(size.width / 2, size.height / 2),
-      0.15, // intensity
-      0.5, // radius
+      0.8, // intensity
+      0.65, // radius
       0.1, // luminanceThreshold
     );
+    if ("luminanceSmoothing" in bloomPass) {
+      (bloomPass as any).luminanceSmoothing = 0.1;
+    }
     bloomPassRef.current = bloomPass;
     bloomComposer.addPass(bloomPass);
 
@@ -275,6 +315,8 @@ function SelectiveBloomEffect() {
         uniforms: {
           baseTexture: { value: null },
           bloomTexture: { value: bloomComposer.renderTarget2.texture },
+          resolution: { value: new THREE.Vector2() },
+          exposure: { value: 1.0 },
         },
         vertexShader: COMPOSITE_SHADER.vertexShader,
         fragmentShader: COMPOSITE_SHADER.fragmentShader,
@@ -284,20 +326,6 @@ function SelectiveBloomEffect() {
     );
     compositePass.needsSwap = true;
     finalComposer.addPass(compositePass);
-
-    // HueSaturation pass
-    const hueSaturationPass = new ShaderPass(
-      new THREE.ShaderMaterial({
-        uniforms: {
-          tDiffuse: { value: null },
-          hue: { value: 0.0 },
-          saturation: { value: 0.1 },
-        },
-        vertexShader: "...",
-        fragmentShader: "...",
-      }),
-    );
-    finalComposer.addPass(hueSaturationPass);
 
     return () => {
       bloomPassRef.current?.dispose();
@@ -312,8 +340,24 @@ function SelectiveBloomEffect() {
     bloomPassRef.current?.resolution.set(size.width / 2, size.height / 2);
   }, [size]);
 
-  useFrame(() => {
+  useFrame((state) => {
     if (!bloomComposerRef.current || !finalComposerRef.current) return;
+
+    // Update composite pass uniforms
+    const finalPasses = (finalComposerRef.current as any).passes;
+    const compositePass = finalPasses?.find(
+      (p: any) => p.material?.uniforms?.resolution,
+    );
+    if (compositePass) {
+      const mat = compositePass.material;
+      mat.uniforms.resolution.value.set(
+        state.size.width * state.viewport.dpr,
+        state.size.height * state.viewport.dpr,
+      );
+      mat.uniforms.bloomTexture.value =
+        bloomComposerRef.current.renderTarget2.texture;
+    }
+
     camera.layers.set(1);
     bloomComposerRef.current.render();
     camera.layers.enable(0);
@@ -324,10 +368,37 @@ function SelectiveBloomEffect() {
   return null;
 }
 
+// Normalize biome value: backend may return a Motoko variant object like { Forest: null }
+// or a plain string like "Forest". Extract the string key in either case.
+function normalizeBiome(biome: string | undefined): string | undefined {
+  if (!biome) return undefined;
+  if (typeof biome === "object" && biome !== null) {
+    // Motoko variant: { Forest: null } → "Forest"
+    const key = Object.keys(biome as Record<string, unknown>)[0];
+    console.log(
+      "[CubeVisualization] Motoko variant biome detected:",
+      biome,
+      "→",
+      key,
+    );
+    return key;
+  }
+  return biome;
+}
+
 export default function CubeVisualization({ biome }: CubeVisualizationProps) {
   const modelUrl = useMemo(() => {
-    if (!biome) return null;
-    return BIOME_MODEL_MAP[biome] || null;
+    const normalized = normalizeBiome(biome);
+    console.log(
+      "[CubeVisualization] biome raw:",
+      biome,
+      "normalized:",
+      normalized,
+    );
+    if (!normalized) return null;
+    const url = BIOME_MODEL_MAP[normalized] || null;
+    console.log("[CubeVisualization] modelUrl:", url);
+    return url;
   }, [biome]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -365,9 +436,8 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           alpha: false,
         }}
         onCreated={({ gl }) => {
-          gl.toneMapping = THREE.AgXToneMapping;
+          gl.toneMapping = THREE.NoToneMapping;
           gl.outputColorSpace = THREE.SRGBColorSpace;
-          gl.toneMappingExposure = 1.2;
           gl.setClearAlpha(1);
         }}
       >
