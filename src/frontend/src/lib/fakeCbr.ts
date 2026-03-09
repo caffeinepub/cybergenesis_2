@@ -393,18 +393,142 @@ export function syncCharge(
 }
 
 // ---------------------------------------------------------------------------
-// Loot drop log — stores modifier instances gained from opening caches
+// Opened cache IDs — persistent set to prevent re-opening after refresh
+// ---------------------------------------------------------------------------
+
+const OPENED_CACHES_KEY = "fake_opened_caches";
+
+function loadOpenedCaches(): string[] {
+  try {
+    const raw = localStorage.getItem(OPENED_CACHES_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function markCacheOpened(cacheId: string): void {
+  const opened = loadOpenedCaches();
+  if (!opened.includes(cacheId)) {
+    opened.push(cacheId);
+    localStorage.setItem(OPENED_CACHES_KEY, JSON.stringify(opened));
+  }
+}
+
+export function isCacheOpened(cacheId: string): boolean {
+  return loadOpenedCaches().includes(cacheId);
+}
+
+export function getOpenedCacheIds(): string[] {
+  return loadOpenedCaches();
+}
+
+// ---------------------------------------------------------------------------
+// Booster inventory — stacked items (e.g. "x3 Nova Charge")
+// ---------------------------------------------------------------------------
+
+const BOOSTERS_KEY = "fake_booster_inventory";
+
+export interface BoosterStack {
+  boosterId: string;
+  count: number;
+}
+
+function loadBoosters(): BoosterStack[] {
+  try {
+    const raw = localStorage.getItem(BOOSTERS_KEY);
+    return raw ? (JSON.parse(raw) as BoosterStack[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveBoosters(data: BoosterStack[]): void {
+  localStorage.setItem(BOOSTERS_KEY, JSON.stringify(data));
+}
+
+export function getBoosters(): BoosterStack[] {
+  return loadBoosters();
+}
+
+export function addBooster(boosterId: string): void {
+  const inv = loadBoosters();
+  const existing = inv.find((b) => b.boosterId === boosterId);
+  if (existing) {
+    existing.count += 1;
+  } else {
+    inv.push({ boosterId, count: 1 });
+  }
+  saveBoosters(inv);
+}
+
+/** Returns false if no booster of that type available. Removes 1 from stack. */
+export function consumeBooster(boosterId: string): boolean {
+  const inv = loadBoosters();
+  const idx = inv.findIndex((b) => b.boosterId === boosterId);
+  if (idx === -1 || inv[idx].count <= 0) return false;
+  inv[idx].count -= 1;
+  if (inv[idx].count === 0) inv.splice(idx, 1);
+  saveBoosters(inv);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Crystal inventory — stacked items
+// ---------------------------------------------------------------------------
+
+const CRYSTALS_KEY = "fake_crystal_inventory";
+
+export interface CrystalStack {
+  crystalId: string;
+  count: number;
+}
+
+function loadCrystals(): CrystalStack[] {
+  try {
+    const raw = localStorage.getItem(CRYSTALS_KEY);
+    return raw ? (JSON.parse(raw) as CrystalStack[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCrystals(data: CrystalStack[]): void {
+  localStorage.setItem(CRYSTALS_KEY, JSON.stringify(data));
+}
+
+export function getCrystals(): CrystalStack[] {
+  return loadCrystals();
+}
+
+export function addCrystal(crystalId: string): void {
+  const inv = loadCrystals();
+  const existing = inv.find((c) => c.crystalId === crystalId);
+  if (existing) {
+    existing.count += 1;
+  } else {
+    inv.push({ crystalId, count: 1 });
+  }
+  saveCrystals(inv);
+}
+
+// ---------------------------------------------------------------------------
+// Loot drop log — stores all items gained from opening caches
 // ---------------------------------------------------------------------------
 
 const LOOT_LOG_KEY = "fake_loot_log";
+
+export type LootItemType = "modifier" | "booster" | "crystal";
 
 export interface LootDropEntry {
   id: number;
   cacheId: string;
   cacheTier: number;
-  modifierType: string;
+  itemType: LootItemType;
+  itemId: string; // modifier name, booster id, or crystal id
+  displayName: string;
   rarityTier: number;
-  multiplierValue: number;
+  multiplierValue: number; // 0 for non-modifiers
   openedAt: number;
 }
 
@@ -430,4 +554,74 @@ export function addLootDrop(entry: Omit<LootDropEntry, "id">): void {
 
 export function getLootLog(): LootDropEntry[] {
   return loadLootLog();
+}
+
+// ---------------------------------------------------------------------------
+// Modifier inventory — local storage for modifiers dropped from caches
+// ---------------------------------------------------------------------------
+
+const MODIFIERS_KEY = "fake_modifier_inventory";
+
+export interface LocalModifier {
+  instanceId: number;
+  modifierType: string;
+  displayName: string;
+  rarityTier: number;
+  assetUrl: string;
+  addedAt: number;
+  appliedToLand?: string; // land id if applied
+}
+
+function loadLocalModifiers(): LocalModifier[] {
+  try {
+    const raw = localStorage.getItem(MODIFIERS_KEY);
+    return raw ? (JSON.parse(raw) as LocalModifier[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalModifiers(data: LocalModifier[]): void {
+  localStorage.setItem(MODIFIERS_KEY, JSON.stringify(data));
+}
+
+export function getLocalModifiers(): LocalModifier[] {
+  return loadLocalModifiers().filter((m) => !m.appliedToLand);
+}
+
+export function addLocalModifier(
+  mod: Omit<LocalModifier, "instanceId" | "addedAt">,
+): void {
+  const inv = loadLocalModifiers();
+  const instanceId =
+    inv.length > 0 ? Math.max(...inv.map((m) => m.instanceId)) + 1 : 1;
+  inv.unshift({ instanceId, addedAt: Date.now(), ...mod });
+  saveLocalModifiers(inv);
+}
+
+export function markModifierApplied(instanceId: number, landId: string): void {
+  const inv = loadLocalModifiers();
+  const idx = inv.findIndex((m) => m.instanceId === instanceId);
+  if (idx !== -1) {
+    inv[idx].appliedToLand = landId;
+    saveLocalModifiers(inv);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Legacy support for old entries without itemType
+export function migrateLootLog(): void {
+  const log = loadLootLog();
+  let changed = false;
+  for (const entry of log) {
+    if (!(entry as { itemType?: string }).itemType) {
+      (entry as { itemType: string }).itemType = "modifier";
+      (entry as { itemId?: string }).itemId =
+        (entry as { modifierType?: string }).modifierType ?? "";
+      (entry as { displayName?: string }).displayName =
+        (entry as { modifierType?: string }).modifierType ?? "";
+      changed = true;
+    }
+  }
+  if (changed) saveLootLog(log);
 }

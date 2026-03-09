@@ -7,103 +7,60 @@ export default function ParticleBackground() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    // Use 2D context - completely isolated from WebGL
-    const ctx = canvas.getContext("2d", {
-      alpha: true,
-      desynchronized: true, // Optimize for animation performance
-    });
+    const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) return;
 
-    console.log("[ParticleBackground] 🎨 2D Canvas initialized (non-WebGL)");
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener("resize", resize);
 
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    const particles: Array<{
-      x: number;
-      y: number;
-      vx: number;
-      vy: number;
-      size: number;
-      color: string;
-    }> = [];
-
-    const colors = [
-      "rgba(0, 243, 255, 0.6)",
-      "rgba(255, 0, 255, 0.6)",
-      "rgba(0, 255, 136, 0.6)",
-      "rgba(170, 0, 255, 0.6)",
-    ];
-
-    for (let i = 0; i < 60; i++) {
-      particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.5,
-        vy: (Math.random() - 0.5) * 0.5,
-        size: Math.random() * 3 + 1,
-        color: colors[Math.floor(Math.random() * colors.length)],
-      });
-    }
+    const particles = Array.from({ length: 40 }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: (Math.random() - 0.5) * 0.4,
+      size: Math.random() * 4 + 2,
+      color: ["#00f3ff", "#ff00ff", "#00ffaa", "#9d00ff"][
+        Math.floor(Math.random() * 4)
+      ],
+    }));
 
     const animate = () => {
-      ctx.fillStyle = "rgba(10, 10, 30, 0.1)";
+      // Эффект шлейфа (Tail)
+      ctx.fillStyle = "rgba(1, 1, 3, 0.1)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      for (const particle of particles) {
-        particle.x += particle.vx;
-        particle.y += particle.vy;
+      for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
 
-        if (particle.x < 0 || particle.x > canvas.width) particle.vx *= -1;
-        if (particle.y < 0 || particle.y > canvas.height) particle.vy *= -1;
+        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
 
+        // Рисуем частицу со «свечением» через два слоя
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = 0.3;
         ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-        ctx.fillStyle = particle.color;
+        ctx.arc(p.x, p.y, p.size * 2, 0, Math.PI * 2); // Внешнее мягкое кольцо
         ctx.fill();
 
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = particle.color;
-      }
-
-      for (let i = 0; i < particles.length; i++) {
-        const p1 = particles[i];
-        for (const p2 of particles.slice(i + 1)) {
-          const dx = p1.x - p2.x;
-          const dy = p1.y - p2.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-
-          if (distance < 150) {
-            ctx.beginPath();
-            ctx.moveTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.strokeStyle = `rgba(0, 243, 255, ${0.2 * (1 - distance / 150)})`;
-            ctx.lineWidth = 0.5;
-            ctx.stroke();
-          }
-        }
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); // Яркое ядро
+        ctx.fill();
       }
 
       animationFrameRef.current = requestAnimationFrame(animate);
     };
 
     animate();
-
-    const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-
-    window.addEventListener("resize", handleResize);
-
     return () => {
-      console.log("[ParticleBackground] 🧹 Cleanup: canceling animation frame");
-      if (animationFrameRef.current !== null) {
+      window.removeEventListener("resize", resize);
+      if (animationFrameRef.current)
         cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      window.removeEventListener("resize", handleResize);
     };
   }, []);
 
@@ -111,7 +68,7 @@ export default function ParticleBackground() {
     <canvas
       ref={canvasRef}
       className="fixed inset-0 w-full h-full pointer-events-none"
-      style={{ background: "transparent", zIndex: 1 }}
+      style={{ zIndex: 1 }}
     />
   );
 }

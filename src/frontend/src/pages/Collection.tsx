@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sparkles, Star, X } from "lucide-react";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import {
   PLANNED_MODIFIER_CATALOG,
   type PlannedModifier,
@@ -157,37 +158,40 @@ export default function Collection() {
         </CardContent>
       </Card>
 
-      {/* Image Modal 500x500 */}
-      {selectedImage && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-          onClick={() => setSelectedImage(null)}
-          onKeyDown={(e) => e.key === "Escape" && setSelectedImage(null)}
-          aria-label="Image viewer"
-        >
+      {/* Image Modal 500x500 - rendered via portal to escape scroll containers */}
+      {selectedImage &&
+        createPortal(
           <div
-            className="relative glassmorphism border border-primary/40 rounded-xl p-4 shadow-[0_0_40px_rgba(0,243,255,0.3)]"
-            style={{ width: 540, height: 540 }}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
+            className="fixed inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+            style={{ zIndex: 9999 }}
+            onClick={() => setSelectedImage(null)}
+            onKeyDown={(e) => e.key === "Escape" && setSelectedImage(null)}
+            aria-label="Image viewer"
           >
-            <button
-              type="button"
-              onClick={() => setSelectedImage(null)}
-              className="absolute top-3 right-3 text-white/60 hover:text-white transition-colors z-10"
-              data-ocid="collection.image_modal.close_button"
+            <div
+              className="relative glassmorphism border border-primary/40 rounded-xl p-4 shadow-[0_0_40px_rgba(0,243,255,0.3)]"
+              style={{ width: 540, height: 540 }}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
             >
-              <X className="w-5 h-5" />
-            </button>
-            <img
-              src={selectedImage.src}
-              alt={selectedImage.name}
-              className="w-full h-full object-contain rounded-lg"
-              style={{ width: 500, height: 500 }}
-            />
-          </div>
-        </div>
-      )}
+              <button
+                type="button"
+                onClick={() => setSelectedImage(null)}
+                className="absolute top-3 right-3 text-white/60 hover:text-white transition-colors z-10"
+                data-ocid="collection.image_modal.close_button"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <img
+                src={selectedImage.src}
+                alt={selectedImage.name}
+                className="w-full h-full object-contain rounded-lg"
+                style={{ width: 500, height: 500 }}
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

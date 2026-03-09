@@ -1,24 +1,21 @@
-import type { LandData, ModifierInstance } from "@/backend";
-import PlotCustomization from "@/components/PlotCustomization";
+import type { LandData } from "@/backend";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PLANNED_MODIFIER_CATALOG } from "@/data/modifierCatalog";
+import { BOOSTER_CATALOG, CRYSTAL_CATALOG } from "@/data/modifierCatalog";
 import {
-  useApplyModifier,
   useClaimRewards,
-  useDebugCanisterBalance,
   useDebugTokenBalance,
-  useGetCanisterTokenBalance,
   useGetLandData,
-  useGetModifierInventory,
   useGetTokenBalance,
   useMintFakeCbr,
   useUpgradePlot,
 } from "@/hooks/useQueries";
 import * as fakeCbr from "@/lib/fakeCbr";
+import type { LocalModifier } from "@/lib/fakeCbr";
 import { formatTokenBalance } from "@/lib/tokenUtils";
 import {
   BatteryCharging,
   ExternalLink,
+  Gem,
   Loader2,
   MapPin,
   TrendingUp,
@@ -40,28 +37,35 @@ export default function LandDashboard({
     isLoading: balanceLoading,
     error: balanceError,
   } = useGetTokenBalance();
-  const { data: modifierInventory, isLoading: inventoryLoading } =
-    useGetModifierInventory();
   const claimRewardsMutation = useClaimRewards();
   const upgradePlotMutation = useUpgradePlot();
   const debugBalanceMutation = useDebugTokenBalance();
-  const applyModifierMutation = useApplyModifier();
   const mintFakeCbrMutation = useMintFakeCbr();
 
-  // Admin-only canister balance
-  const { data: canisterBalance } = useGetCanisterTokenBalance();
-  const debugCanisterBalanceMutation = useDebugCanisterBalance();
-
-  const [showAdminDebug, setShowAdminDebug] = useState(false);
   const [cooldownRemaining, setCooldownRemaining] = useState<number | null>(
     null,
   );
   const [isCooldownActive, setIsCooldownActive] = useState(false);
   const [simulatedCharge, setSimulatedCharge] = useState<number | null>(null);
 
+  const [boosterStacks, setBoosterStacks] = useState(() =>
+    fakeCbr.getBoosters(),
+  );
+  const [crystalStacks, setCrystalStacks] = useState(() =>
+    fakeCbr.getCrystals(),
+  );
+  const [localModifiers, setLocalModifiers] = useState<LocalModifier[]>(() =>
+    fakeCbr.getLocalModifiers(),
+  );
+
+  const refreshInventory = () => {
+    setBoosterStacks(fakeCbr.getBoosters());
+    setCrystalStacks(fakeCbr.getCrystals());
+    setLocalModifiers(fakeCbr.getLocalModifiers());
+  };
+
   const selectedLand: LandData | undefined = lands?.[selectedLandIndex];
 
-  // Simulate charge accumulation: 100 charge per minute (test rate)
   const landIdForCharge = selectedLand?.landId;
   const chargeCapForEffect = selectedLand
     ? Number(selectedLand.chargeCap)
@@ -69,7 +73,8 @@ export default function LandDashboard({
   const backendChargeForEffect = selectedLand
     ? Number(selectedLand.cycleCharge)
     : 0;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: backendChargeForEffect intentionally excluded — including it would reset the interval on every tick
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: backendChargeForEffect intentionally excluded
   useEffect(() => {
     if (landIdForCharge === undefined) return;
     const landId = landIdForCharge.toString();
@@ -91,7 +96,6 @@ export default function LandDashboard({
     return () => clearInterval(chargeInterval);
   }, [landIdForCharge, chargeCapForEffect]);
 
-  // Sync simulated charge when backend cycleCharge changes (after spending charge)
   useEffect(() => {
     if (landIdForCharge === undefined) return;
     fakeCbr.syncCharge(
@@ -102,17 +106,14 @@ export default function LandDashboard({
     setSimulatedCharge(backendChargeForEffect);
   }, [backendChargeForEffect, landIdForCharge, chargeCapForEffect]);
 
-  // Calculate cooldown timer
   useEffect(() => {
     if (!selectedLand) return;
-
     const updateCooldown = () => {
-      const currentTime = Date.now() * 1_000_000; // Convert to nanoseconds
+      const currentTime = Date.now() * 1_000_000;
       const lastClaimTime = Number(selectedLand.lastClaimTime);
       const dayInNanos = 86_400_000_000_000;
       const nextClaimTime = lastClaimTime + dayInNanos;
       const remaining = nextClaimTime - currentTime;
-
       if (remaining > 0) {
         setCooldownRemaining(remaining);
         setIsCooldownActive(true);
@@ -121,10 +122,8 @@ export default function LandDashboard({
         setIsCooldownActive(false);
       }
     };
-
     updateCooldown();
     const interval = setInterval(updateCooldown, 1000);
-
     return () => clearInterval(interval);
   }, [selectedLand]);
 
@@ -133,29 +132,21 @@ export default function LandDashboard({
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-
-    if (hours > 0) {
-      return `${hours}h ${minutes}m ${seconds}s`;
-    }
-    if (minutes > 0) {
-      return `${minutes}m ${seconds}s`;
-    }
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
     return `${seconds}s`;
   };
 
   const handleClaimRewards = async () => {
     if (!selectedLand) return;
-
     try {
       const result = await claimRewardsMutation.mutateAsync(
         selectedLand.landId,
       );
-
       if (result.__kind__ === "success") {
-        const formattedAmount = formatTokenBalance(
-          result.success.tokensClaimed,
+        toast.success(
+          `Claimed ${formatTokenBalance(result.success.tokensClaimed)} CBR tokens!`,
         );
-        toast.success(`Claimed ${formattedAmount} CBR tokens!`);
       } else if (result.__kind__ === "cooldown") {
         const hours = Math.floor(
           Number(result.cooldown.remainingTime) / 3600000000000,
@@ -172,29 +163,24 @@ export default function LandDashboard({
         toast.error(`Minting error: ${result.mintFailed}`);
       }
     } catch (error: any) {
-      console.error("Claim error:", error);
       toast.error(`Claim error: ${error.message || "Unknown error"}`);
     }
   };
 
   const handleUpgradePlot = async () => {
     if (!selectedLand) return;
-
     const cost = BigInt(1000);
-
     if (!tokenBalance || tokenBalance < cost) {
       toast.error(
         `Insufficient tokens. Required: ${formatTokenBalance(cost)} CBR`,
       );
       return;
     }
-
     try {
       const result = await upgradePlotMutation.mutateAsync({
         landId: selectedLand.landId,
         cost,
       });
-
       if (result.__kind__ === "success") {
         toast.success(`Plot upgraded to level ${result.success.newLevel}!`);
       } else if (result.__kind__ === "maxLevelReached") {
@@ -205,48 +191,45 @@ export default function LandDashboard({
         );
       }
     } catch (error: any) {
-      console.error("Upgrade error:", error);
       toast.error(`Upgrade error: ${error.message || "Unknown error"}`);
-    }
-  };
-
-  const handleDebugBalance = async () => {
-    try {
-      await debugBalanceMutation.mutateAsync();
-    } catch (error) {
-      console.error("Debug balance error:", error);
-    }
-  };
-
-  const handleDebugCanisterBalance = async () => {
-    try {
-      await debugCanisterBalanceMutation.mutateAsync();
-    } catch (error) {
-      console.error("Debug canister balance error:", error);
-    }
-  };
-
-  const handleApplyModifier = async (modifierInstanceId: bigint) => {
-    if (!selectedLand) return;
-
-    try {
-      await applyModifierMutation.mutateAsync({
-        modifierInstanceId,
-        landId: selectedLand.landId,
-      });
-    } catch (error: any) {
-      console.error("Apply modifier error:", error);
     }
   };
 
   const handleOpenMap = () => {
     if (!selectedLand) return;
     const { lat, lon } = selectedLand.coordinates;
-    const url = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=15/${lat}/${lon}`;
-    window.open(url, "_blank");
+    window.open(
+      `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=15/${lat}/${lon}`,
+      "_blank",
+    );
   };
 
-  if (landsLoading || balanceLoading || inventoryLoading) {
+  const handleUseBooster = (boosterId: string) => {
+    const booster = BOOSTER_CATALOG.find((b) => b.id === boosterId);
+    if (!booster) return;
+    const used = fakeCbr.consumeBooster(boosterId);
+    if (!used) {
+      toast.error("Нет доступных бустеров этого типа");
+      return;
+    }
+    if (landIdForCharge !== undefined) {
+      const current = simulatedCharge ?? backendChargeForEffect;
+      const newCharge = Math.min(
+        current + booster.energyAmount,
+        chargeCapForEffect,
+      );
+      fakeCbr.syncCharge(
+        landIdForCharge.toString(),
+        newCharge,
+        chargeCapForEffect,
+      );
+      setSimulatedCharge(newCharge);
+    }
+    toast.success(`${booster.name}: +${booster.energyAmount} энергии!`);
+    refreshInventory();
+  };
+
+  if (landsLoading || balanceLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="w-8 h-8 animate-spin text-[#00ffff] drop-shadow-[0_0_10px_rgba(0,255,255,0.8)]" />
@@ -255,7 +238,6 @@ export default function LandDashboard({
   }
 
   if (!selectedLand) {
-    // lands loaded but this index doesn't exist yet -- keep showing loader briefly
     if (!lands || lands.length === 0) {
       return (
         <div className="flex items-center justify-center min-h-[400px]">
@@ -303,18 +285,11 @@ export default function LandDashboard({
               <p className="text-red-400 font-jetbrains">Balance unavailable</p>
               <button
                 type="button"
-                onClick={handleDebugBalance}
+                onClick={() => debugBalanceMutation.mutateAsync()}
                 disabled={debugBalanceMutation.isPending}
                 className="px-4 py-2 rounded-lg btn-gradient-green text-black font-orbitron disabled:opacity-50"
               >
-                {debugBalanceMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                    Refreshing...
-                  </>
-                ) : (
-                  "Refresh Balance"
-                )}
+                Refresh Balance
               </button>
             </div>
           ) : (
@@ -325,18 +300,11 @@ export default function LandDashboard({
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={handleDebugBalance}
+                  onClick={() => debugBalanceMutation.mutateAsync()}
                   disabled={debugBalanceMutation.isPending}
-                  className="px-3 py-1 rounded glassmorphism text-[#00ffff] hover:text-[#00ffff] hover:bg-[#00ffff]/10 transition-all duration-300 text-sm font-jetbrains border border-[#00ffff]/30"
+                  className="px-3 py-1 rounded glassmorphism text-[#00ffff] hover:bg-[#00ffff]/10 transition-all duration-300 text-sm font-jetbrains border border-[#00ffff]/30"
                 >
-                  {debugBalanceMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                      Refreshing...
-                    </>
-                  ) : (
-                    "Refresh Balance"
-                  )}
+                  Refresh Balance
                 </button>
                 <button
                   data-ocid="dashboard.mint_cbr.primary_button"
@@ -353,7 +321,7 @@ export default function LandDashboard({
                       Minting...
                     </>
                   ) : (
-                    "🧪 Mint 1000 CBR"
+                    "Mint 1000 CBR"
                   )}
                 </button>
               </div>
@@ -430,7 +398,6 @@ export default function LandDashboard({
             </div>
           </div>
 
-          {/* Attached Modifiers */}
           {selectedLand.attachedModifications &&
             selectedLand.attachedModifications.length > 0 && (
               <div className="pt-4 border-t border-white/10">
@@ -449,15 +416,12 @@ export default function LandDashboard({
                             {mod.modifierType}
                           </p>
                           <p className="text-white/50 text-sm font-jetbrains">
-                            Tier {mod.rarity_tier.toString()} • +
-                            {(mod.multiplier_value * 100 - 100).toFixed(0)}%
+                            Tier {mod.rarity_tier.toString()}
                           </p>
                         </div>
-                        <div className="text-right">
-                          <p className="text-[#00ff41] text-sm font-jetbrains">
-                            ID: {mod.modifierInstanceId.toString()}
-                          </p>
-                        </div>
+                        <p className="text-[#00ff41] text-sm font-jetbrains">
+                          ID: {mod.modifierInstanceId.toString()}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -503,83 +467,41 @@ export default function LandDashboard({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {inventoryLoading ? (
-            <div className="flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-[#9933ff]" />
-              <span className="text-white/70 font-jetbrains">
-                Loading inventory...
-              </span>
-            </div>
-          ) : !modifierInventory || modifierInventory.length === 0 ? (
+          {localModifiers.length === 0 ? (
             <p className="text-white/50 text-center py-4 font-jetbrains">
-              No available modifiers
+              Нет доступных модификаторов. Открывайте кэши!
             </p>
           ) : (
             <div className="space-y-3">
-              {modifierInventory.map((modifier) => {
-                const normalized = modifier.modifierType
-                  .toLowerCase()
-                  .replace(/_/g, " ")
-                  .replace(/\b\w/g, (c) => c.toUpperCase());
-                const catalogEntry = PLANNED_MODIFIER_CATALOG.find(
-                  (m) => m.name.toLowerCase() === normalized.toLowerCase(),
-                );
-                const assetUrl =
-                  catalogEntry?.asset_url ??
-                  PLANNED_MODIFIER_CATALOG[0]?.asset_url ??
-                  "";
-                return (
-                  <div
-                    key={modifier.modifierInstanceId.toString()}
-                    className="glassmorphism rounded-lg p-4 border border-[#9933ff]/30 hover:border-[#9933ff]/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 flex-shrink-0 rounded-lg overflow-hidden bg-black/30 flex items-center justify-center">
-                        {assetUrl ? (
-                          <img
-                            src={assetUrl}
-                            alt={modifier.modifierType}
-                            className="w-9 h-9 object-contain"
-                          />
-                        ) : null}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white font-medium font-jetbrains">
-                          {modifier.modifierType}
-                        </p>
-                        <p className="text-white/50 text-sm font-jetbrains">
-                          Tier {modifier.rarity_tier.toString()} • Multiplier:{" "}
-                          {modifier.multiplier_value}x
-                        </p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-[#9933ff] text-xs font-jetbrains">
-                          ID: {modifier.modifierInstanceId.toString()}
-                        </p>
-                      </div>
+              {localModifiers.map((modifier: LocalModifier) => (
+                <div
+                  key={modifier.instanceId}
+                  className="glassmorphism rounded-lg p-4 border border-[#9933ff]/30 hover:border-[#9933ff]/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 flex-shrink-0 rounded-lg overflow-hidden bg-black/30 flex items-center justify-center">
+                      {modifier.assetUrl ? (
+                        <img
+                          src={modifier.assetUrl}
+                          alt={modifier.displayName}
+                          className="w-9 h-9 object-contain"
+                        />
+                      ) : null}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleApplyModifier(modifier.modifierInstanceId)
-                      }
-                      disabled={
-                        applyModifierMutation.isPending || !selectedLand
-                      }
-                      className="w-full px-4 py-2 rounded-lg btn-gradient-purple text-white font-bold font-orbitron disabled:opacity-50"
-                    >
-                      {applyModifierMutation.isPending ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                          Applying...
-                        </>
-                      ) : (
-                        "APPLY TO LAND"
-                      )}
-                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-medium font-jetbrains">
+                        {modifier.displayName}
+                      </p>
+                      <p className="text-white/50 text-sm font-jetbrains">
+                        Tier {modifier.rarityTier}
+                      </p>
+                    </div>
+                    <p className="text-[#9933ff] text-xs font-jetbrains flex-shrink-0">
+                      ID: {modifier.instanceId}
+                    </p>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
@@ -631,51 +553,137 @@ export default function LandDashboard({
         </CardContent>
       </Card>
 
-      {/* Plot Customization */}
-      <PlotCustomization selectedLandIndex={selectedLandIndex} />
-
-      {/* Admin Debug Panel */}
-      <Card className="glassmorphism border border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+      {/* Boosters & Crystals */}
+      <Card className="glassmorphism neon-border box-glow-cyan">
         <CardHeader>
-          <CardTitle
-            className="text-red-400 cursor-pointer flex items-center justify-between font-orbitron"
-            onClick={() => setShowAdminDebug(!showAdminDebug)}
-          >
-            <span>DEBUG PANEL (ADMIN)</span>
-            <span className="text-sm">{showAdminDebug ? "▼" : "▶"}</span>
+          <CardTitle className="text-[#00ffff] flex items-center gap-2 font-orbitron text-glow-cyan">
+            <Zap className="w-5 h-5" />
+            БУСТЕРЫ
           </CardTitle>
         </CardHeader>
-        {showAdminDebug && (
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-white/70 text-sm mb-2 font-jetbrains">
-                Canister balance:
+        <CardContent className="space-y-5">
+          {/* Boosters */}
+          <div>
+            <p className="text-[#00ffff]/50 text-xs font-jetbrains uppercase tracking-widest mb-3">
+              Бустеры энергии
+            </p>
+            {boosterStacks.length === 0 ? (
+              <p className="text-white/30 text-sm font-jetbrains">
+                Нет бустеров. Открывайте кэши!
               </p>
-              <p className="text-white font-mono font-jetbrains">
-                {canisterBalance ? formatTokenBalance(canisterBalance) : "---"}{" "}
-                CBR
-              </p>
-              <p className="text-white/50 text-xs font-jetbrains">
-                Raw: {canisterBalance ? canisterBalance.toString() : "---"} e8s
-              </p>
+            ) : (
+              <div className="space-y-2">
+                {boosterStacks.map((stack) => {
+                  const booster = BOOSTER_CATALOG.find(
+                    (b) => b.id === stack.boosterId,
+                  );
+                  if (!booster) return null;
+                  const rarityBorder =
+                    booster.rarity === "legendary"
+                      ? "border-yellow-400/40 bg-yellow-400/5"
+                      : booster.rarity === "rare"
+                        ? "border-[#9933ff]/40 bg-[#9933ff]/5"
+                        : "border-[#00ffff]/30 bg-[#00ffff]/5";
+                  return (
+                    <div
+                      key={stack.boosterId}
+                      className={`glassmorphism rounded-lg p-3 border ${rarityBorder} flex items-center gap-3`}
+                    >
+                      <div className="w-10 h-10 flex-shrink-0 rounded-lg overflow-hidden bg-black/30 flex items-center justify-center">
+                        <img
+                          src={booster.asset_url}
+                          alt={booster.name}
+                          className="w-9 h-9 object-contain"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-medium font-jetbrains text-sm">
+                          {booster.name}
+                        </p>
+                        <p className="text-white/50 text-xs font-jetbrains">
+                          {booster.description}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {stack.count > 1 && (
+                          <span className="text-[#00ffff]/60 text-xs font-jetbrains bg-[#00ffff]/10 border border-[#00ffff]/20 px-2 py-0.5 rounded">
+                            x{stack.count}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleUseBooster(stack.boosterId)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold font-orbitron btn-gradient-cyan text-black hover:opacity-90 transition-all duration-200"
+                        >
+                          USE
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Crystals */}
+      <Card className="glassmorphism neon-border box-glow-purple">
+        <CardHeader>
+          <CardTitle className="text-[#9933ff] flex items-center gap-2 font-orbitron text-glow-purple">
+            <Gem className="w-5 h-5" />
+            КРИСТАЛЛЫ
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {crystalStacks.length === 0 ? (
+            <p className="text-white/30 text-sm font-jetbrains">
+              Нет кристаллов. Открывайте кэши!
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {crystalStacks.map((stack) => {
+                const crystal = CRYSTAL_CATALOG.find(
+                  (c) => c.id === stack.crystalId,
+                );
+                if (!crystal) return null;
+                const rarityBorder =
+                  crystal.rarity === "mythic"
+                    ? "border-yellow-400/40 bg-yellow-400/5"
+                    : crystal.rarity === "legendary"
+                      ? "border-[#9933ff]/40 bg-[#9933ff]/5"
+                      : "border-emerald-400/40 bg-emerald-400/5";
+                return (
+                  <div
+                    key={stack.crystalId}
+                    className={`glassmorphism rounded-lg p-3 border ${rarityBorder} flex items-center gap-3`}
+                  >
+                    <div className="w-10 h-10 flex-shrink-0 rounded-lg overflow-hidden bg-black/30 flex items-center justify-center">
+                      <img
+                        src={crystal.asset_url}
+                        alt={crystal.name}
+                        className="w-9 h-9 object-contain"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-medium font-jetbrains text-sm">
+                        {crystal.name}
+                      </p>
+                      <p className="text-white/50 text-xs font-jetbrains">
+                        {crystal.description}
+                      </p>
+                    </div>
+                    {stack.count > 1 && (
+                      <span className="text-[#9933ff]/70 text-xs font-jetbrains bg-[#9933ff]/10 border border-[#9933ff]/20 px-2 py-0.5 rounded flex-shrink-0">
+                        x{stack.count}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            <button
-              type="button"
-              onClick={handleDebugCanisterBalance}
-              disabled={debugCanisterBalanceMutation.isPending}
-              className="w-full px-4 py-2 rounded-lg glassmorphism border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-all duration-300 font-orbitron disabled:opacity-50"
-            >
-              {debugCanisterBalanceMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                  Checking...
-                </>
-              ) : (
-                "CHECK CANISTER BALANCE"
-              )}
-            </button>
-          </CardContent>
-        )}
+          )}
+        </CardContent>
       </Card>
     </div>
   );

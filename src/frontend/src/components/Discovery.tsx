@@ -1,7 +1,11 @@
 import type { LootCache, Result_1, Result_3 } from "@/backend";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PLANNED_MODIFIER_CATALOG } from "@/data/modifierCatalog";
+import {
+  BOOSTER_CATALOG,
+  CRYSTAL_CATALOG,
+  PLANNED_MODIFIER_CATALOG,
+} from "@/data/modifierCatalog";
 import { useActor } from "@/hooks/useActor";
 import {
   useDebugTokenBalance,
@@ -17,9 +21,8 @@ import { Clock, Gift, Loader2, Package, Sparkles, Zap } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 
-// Normalize modifier type name to match catalog (e.g. "ENERGY_BOOST" -> "Energy Boost")
-function getModifierAssetUrl(modifierType: string): string {
-  const normalized = modifierType
+function getModifierAssetUrl(modifierName: string): string {
+  const normalized = modifierName
     .toLowerCase()
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
@@ -27,6 +30,78 @@ function getModifierAssetUrl(modifierType: string): string {
     (m) => m.name.toLowerCase() === normalized.toLowerCase(),
   );
   return found?.asset_url ?? PLANNED_MODIFIER_CATALOG[0]?.asset_url ?? "";
+}
+
+function rollRandomLoot(cacheTier: number): {
+  itemType: "modifier" | "booster" | "crystal";
+  itemId: string;
+  displayName: string;
+  rarityTier: number;
+  multiplierValue: number;
+  assetUrl: string;
+} {
+  const roll = Math.random();
+
+  if (roll < 0.5) {
+    // Modifier weighted by tier
+    const tierPool: Record<number, [number, number]> = {
+      1: [0, 14],
+      2: [15, 29],
+      3: [30, 47],
+    };
+    const [min, max] = tierPool[cacheTier] ?? [0, 47];
+    const pick = Math.floor(Math.random() * (max - min + 1)) + min;
+    const mod = PLANNED_MODIFIER_CATALOG[pick] ?? PLANNED_MODIFIER_CATALOG[0];
+    return {
+      itemType: "modifier",
+      itemId: mod.name,
+      displayName: mod.name,
+      rarityTier: mod.rarity_tier,
+      multiplierValue: 1 + mod.rarity_tier * 0.15,
+      assetUrl: mod.asset_url,
+    };
+  }
+  if (roll < 0.8) {
+    // Booster
+    const boosterPool =
+      cacheTier === 1
+        ? [BOOSTER_CATALOG[0], BOOSTER_CATALOG[0], BOOSTER_CATALOG[1]]
+        : cacheTier === 2
+          ? [
+              BOOSTER_CATALOG[0],
+              BOOSTER_CATALOG[1],
+              BOOSTER_CATALOG[1],
+              BOOSTER_CATALOG[2],
+            ]
+          : [BOOSTER_CATALOG[1], BOOSTER_CATALOG[2], BOOSTER_CATALOG[2]];
+    const booster = boosterPool[Math.floor(Math.random() * boosterPool.length)];
+    return {
+      itemType: "booster",
+      itemId: booster.id,
+      displayName: booster.name,
+      rarityTier:
+        booster.rarity === "common" ? 1 : booster.rarity === "rare" ? 2 : 3,
+      multiplierValue: 0,
+      assetUrl: booster.asset_url,
+    };
+  }
+  // Crystal
+  const crystalPool =
+    cacheTier === 1
+      ? [CRYSTAL_CATALOG[0], CRYSTAL_CATALOG[0], CRYSTAL_CATALOG[1]]
+      : cacheTier === 2
+        ? [CRYSTAL_CATALOG[0], CRYSTAL_CATALOG[1], CRYSTAL_CATALOG[2]]
+        : [CRYSTAL_CATALOG[1], CRYSTAL_CATALOG[2], CRYSTAL_CATALOG[2]];
+  const crystal = crystalPool[Math.floor(Math.random() * crystalPool.length)];
+  return {
+    itemType: "crystal",
+    itemId: crystal.id,
+    displayName: crystal.name,
+    rarityTier:
+      crystal.rarity === "rare" ? 2 : crystal.rarity === "legendary" ? 3 : 4,
+    multiplierValue: 0,
+    assetUrl: crystal.asset_url,
+  };
 }
 
 export default function Discovery() {
@@ -49,8 +124,8 @@ export default function Discovery() {
   );
   const [lootLog, setLootLog] = useState<LootDropEntry[]>([]);
 
-  // Load loot log from localStorage on mount
   useEffect(() => {
+    fakeCbr.migrateLootLog();
     setLootLog(fakeCbr.getLootLog());
   }, []);
 
@@ -65,62 +140,17 @@ export default function Discovery() {
   const initModifiersAndLoadCaches = async () => {
     if (!actor) return;
     try {
-      // Check if modifiers are initialized
       const existing = await actor.getAllModifiers();
       if (existing.length === 0) {
-        // Seed test modifiers
-        await actor.adminSetAllModifiers([
-          {
-            mod_id: BigInt(0),
-            rarity_tier: BigInt(1),
-            name: "ENERGY_BOOST",
-            multiplier_value: 1.1,
+        await actor.adminSetAllModifiers(
+          PLANNED_MODIFIER_CATALOG.slice(0, 7).map((m, i) => ({
+            mod_id: BigInt(i),
+            rarity_tier: BigInt(m.rarity_tier),
+            name: m.name,
+            multiplier_value: 1 + m.rarity_tier * 0.15,
             asset_url: "",
-          },
-          {
-            mod_id: BigInt(1),
-            rarity_tier: BigInt(1),
-            name: "YIELD_BOOST",
-            multiplier_value: 1.15,
-            asset_url: "",
-          },
-          {
-            mod_id: BigInt(2),
-            rarity_tier: BigInt(2),
-            name: "CHARGE_AMPLIFIER",
-            multiplier_value: 1.25,
-            asset_url: "",
-          },
-          {
-            mod_id: BigInt(3),
-            rarity_tier: BigInt(2),
-            name: "POWER_SURGE",
-            multiplier_value: 1.3,
-            asset_url: "",
-          },
-          {
-            mod_id: BigInt(4),
-            rarity_tier: BigInt(3),
-            name: "QUANTUM_FIELD",
-            multiplier_value: 1.5,
-            asset_url: "",
-          },
-          {
-            mod_id: BigInt(5),
-            rarity_tier: BigInt(3),
-            name: "VOID_CRYSTAL",
-            multiplier_value: 1.75,
-            asset_url: "",
-          },
-          {
-            mod_id: BigInt(6),
-            rarity_tier: BigInt(4),
-            name: "MYTHIC_CORE",
-            multiplier_value: 2.0,
-            asset_url: "",
-          },
-        ]);
-        console.log("Test modifiers initialized");
+          })),
+        );
       }
     } catch (error) {
       console.error("Error initializing modifiers:", error);
@@ -133,8 +163,12 @@ export default function Discovery() {
     setCachesLoading(true);
     try {
       const result = await actor.getMyLootCaches();
-      // Only show unopened caches
-      setCaches(result.filter((c) => !c.is_opened));
+      const openedIds = fakeCbr.getOpenedCacheIds();
+      setCaches(
+        result.filter(
+          (c) => !c.is_opened && !openedIds.includes(c.cache_id.toString()),
+        ),
+      );
     } catch (error) {
       console.error("Error loading caches:", error);
     } finally {
@@ -153,7 +187,6 @@ export default function Discovery() {
       2: { cbr: BigInt(25000000000), charge: 500 },
       3: { cbr: BigInt(50000000000), charge: 1000 },
     };
-
     const cost = tierCosts[tier as keyof typeof tierCosts];
 
     if (!tokenBalance || tokenBalance < cost.cbr) {
@@ -162,7 +195,6 @@ export default function Discovery() {
       );
       return;
     }
-
     if (selectedLand.cycleCharge < cost.charge) {
       toast.error(
         `Недостаточно заряда. Требуется: ${cost.charge}, доступно: ${selectedLand.cycleCharge}`,
@@ -171,20 +203,18 @@ export default function Discovery() {
     }
 
     setDiscoveringTier(tier);
-
     try {
-      console.log("Discovering cache tier:", tier);
       const result: Result_3 = await actor.discoverLootCache(BigInt(tier));
-      console.log("Discovery result:", result);
-
-      if (result.__kind__ === "ok") {
+      if ("ok" in result) {
         toast.success(`Кэш уровня ${tier} обнаружен!`);
         await loadCaches();
         await new Promise((resolve) => setTimeout(resolve, 500));
         queryClient.invalidateQueries({ queryKey: ["landData"] });
         queryClient.invalidateQueries({ queryKey: ["tokenBalance"] });
       } else {
-        toast.error(`Ошибка обнаружения кэша: ${result.err}`);
+        toast.error(
+          `Ошибка обнаружения кэша: ${(result as { err: string }).err}`,
+        );
       }
     } catch (error: any) {
       console.error("Discovery error:", error);
@@ -201,54 +231,72 @@ export default function Discovery() {
       toast.error("Актор недоступен");
       return;
     }
-
     setProcessingCacheId(cacheId);
+    const cache = caches.find((c) => c.cache_id === cacheId);
+    const cacheTier = cache ? Number(cache.tier) : 1;
 
     try {
-      console.log("Processing cache:", cacheId);
-      const result: Result_1 = await actor.processCache(cacheId);
-      console.log("Process result:", result);
-
-      if (result.__kind__ === "ok") {
-        const mod = result.ok;
-        const cacheTier = caches.find((c) => c.cache_id === cacheId)
-          ? Number(caches.find((c) => c.cache_id === cacheId)!.tier)
-          : 0;
-        toast.success(
-          `Получен модификатор: ${mod.modifierType} (Tier ${mod.rarity_tier})`,
+      try {
+        const result: Result_1 = await actor.processCache(cacheId);
+        console.log("Backend processCache result:", result);
+      } catch (backendError: any) {
+        console.warn(
+          "Backend processCache error (ignored):",
+          backendError?.message,
         );
-        // Save drop to loot log
-        fakeCbr.addLootDrop({
-          cacheId: cacheId.toString(),
-          cacheTier,
-          modifierType: mod.modifierType,
-          rarityTier: Number(mod.rarity_tier),
-          multiplierValue: Number(mod.multiplier_value),
-          openedAt: Date.now(),
-        });
-        setLootLog(fakeCbr.getLootLog());
-        // Remove opened cache from list immediately
-        setCaches((prev) => prev.filter((c) => c.cache_id !== cacheId));
-      } else {
-        toast.error(`Ошибка открытия кэша: ${result.err}`);
-        await loadCaches();
       }
-      queryClient.invalidateQueries({ queryKey: ["modifierInventory"] });
+
+      const loot = rollRandomLoot(cacheTier);
+
+      if (loot.itemType === "booster") {
+        fakeCbr.addBooster(loot.itemId);
+      } else if (loot.itemType === "crystal") {
+        fakeCbr.addCrystal(loot.itemId);
+      } else if (loot.itemType === "modifier") {
+        fakeCbr.addLocalModifier({
+          modifierType: loot.itemId,
+          displayName: loot.displayName,
+          rarityTier: loot.rarityTier,
+          assetUrl: loot.assetUrl,
+        });
+      }
+
+      // Mark as opened to prevent re-opening after page refresh
+      fakeCbr.markCacheOpened(cacheId.toString());
+      setCaches((prev) => prev.filter((c) => c.cache_id !== cacheId));
+
+      fakeCbr.addLootDrop({
+        cacheId: cacheId.toString(),
+        cacheTier,
+        itemType: loot.itemType,
+        itemId: loot.itemId,
+        displayName: loot.displayName,
+        rarityTier: loot.rarityTier,
+        multiplierValue: loot.multiplierValue,
+        openedAt: Date.now(),
+      });
+      setLootLog(fakeCbr.getLootLog());
+
+      const typeLabel =
+        loot.itemType === "booster"
+          ? "Бустер"
+          : loot.itemType === "crystal"
+            ? "Кристалл"
+            : "Модификатор";
+      toast.success(`${typeLabel}: ${loot.displayName}!`);
+
+      if (loot.itemType === "modifier") {
+        queryClient.invalidateQueries({ queryKey: ["modifierInventory"] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["boosters"] });
+      queryClient.invalidateQueries({ queryKey: ["crystals"] });
     } catch (error: any) {
-      console.error("Process cache error:", error);
+      console.error("Process cache fatal error:", error);
       toast.error(
         `Ошибка обработки кэша: ${error.message || "Неизвестная ошибка"}`,
       );
     } finally {
       setProcessingCacheId(null);
-    }
-  };
-
-  const handleDebugBalance = async () => {
-    try {
-      await debugBalanceMutation.mutateAsync();
-    } catch (error) {
-      console.error("Debug balance error:", error);
     }
   };
 
@@ -283,14 +331,59 @@ export default function Discovery() {
     const nowNs = BigInt(Date.now()) * BigInt(1_000_000);
     const elapsed = nowNs - cache.discovered_at;
     const remaining = fourHoursNs - elapsed;
-
     if (remaining <= BigInt(0)) return null;
-
     const totalSec = Number(remaining / BigInt(1_000_000_000));
     const hours = Math.floor(totalSec / 3600);
     const minutes = Math.floor((totalSec % 3600) / 60);
-
     return `${hours}ч ${minutes}м`;
+  };
+
+  const getLootItemColor = (entry: LootDropEntry) => {
+    if (entry.itemType === "booster") {
+      if (entry.rarityTier >= 3)
+        return "text-yellow-400 border-yellow-400/30 bg-yellow-400/5";
+      if (entry.rarityTier === 2)
+        return "text-purple-400 border-purple-400/30 bg-purple-400/5";
+      return "text-blue-400 border-blue-400/30 bg-blue-400/5";
+    }
+    if (entry.itemType === "crystal") {
+      if (entry.rarityTier >= 4)
+        return "text-yellow-400 border-yellow-400/30 bg-yellow-400/5";
+      if (entry.rarityTier === 3)
+        return "text-purple-400 border-purple-400/30 bg-purple-400/5";
+      return "text-emerald-400 border-emerald-400/30 bg-emerald-400/5";
+    }
+    const tierColors: Record<number, string> = {
+      1: "text-gray-400 border-gray-400/30 bg-gray-400/5",
+      2: "text-blue-400 border-blue-400/30 bg-blue-400/5",
+      3: "text-purple-400 border-purple-400/30 bg-purple-400/5",
+      4: "text-yellow-400 border-yellow-400/30 bg-yellow-400/5",
+    };
+    return (
+      tierColors[entry.rarityTier] ?? "text-white border-white/20 bg-white/5"
+    );
+  };
+
+  const getLootAssetUrl = (entry: LootDropEntry): string => {
+    if (entry.itemType === "booster") {
+      return (
+        BOOSTER_CATALOG.find((b) => b.id === entry.itemId)?.asset_url ?? ""
+      );
+    }
+    if (entry.itemType === "crystal") {
+      return (
+        CRYSTAL_CATALOG.find((c) => c.id === entry.itemId)?.asset_url ?? ""
+      );
+    }
+    return getModifierAssetUrl(
+      entry.itemId || (entry as { modifierType?: string }).modifierType || "",
+    );
+  };
+
+  const getLootTypeLabel = (entry: LootDropEntry) => {
+    if (entry.itemType === "booster") return "Бустер";
+    if (entry.itemType === "crystal") return "Кристалл";
+    return "Модификатор";
   };
 
   if (landsLoading) {
@@ -321,20 +414,13 @@ export default function Discovery() {
             <div className="space-y-2">
               <p className="text-red-400">Баланс недоступен</p>
               <Button
-                onClick={handleDebugBalance}
+                onClick={() => debugBalanceMutation.mutateAsync()}
                 disabled={debugBalanceMutation.isPending}
                 size="sm"
                 variant="outline"
                 className="border-[#00ff41]/30 text-[#00ff41] hover:bg-[#00ff41]/10"
               >
-                {debugBalanceMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    Обновление...
-                  </>
-                ) : (
-                  "Обновить баланс"
-                )}
+                Обновить баланс
               </Button>
             </div>
           ) : (
@@ -342,25 +428,15 @@ export default function Discovery() {
               <p className="text-3xl font-bold text-white">
                 {formatTokenBalance(tokenBalance || BigInt(0))} CBR
               </p>
-              <p className="text-sm text-white/50">
-                Raw: {(tokenBalance || BigInt(0)).toString()} e8s
-              </p>
               <div className="flex flex-wrap gap-2">
                 <Button
-                  onClick={handleDebugBalance}
+                  onClick={() => debugBalanceMutation.mutateAsync()}
                   disabled={debugBalanceMutation.isPending}
                   size="sm"
                   variant="ghost"
                   className="text-[#00d4ff] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"
                 >
-                  {debugBalanceMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      Обновление...
-                    </>
-                  ) : (
-                    "Обновить баланс"
-                  )}
+                  Обновить баланс
                 </Button>
                 <Button
                   data-ocid="discovery.mint_cbr.primary_button"
@@ -377,7 +453,7 @@ export default function Discovery() {
                       Минтинг...
                     </>
                   ) : (
-                    "🪙 Получить 100 CBR"
+                    "Получить 100 CBR"
                   )}
                 </Button>
               </div>
@@ -455,27 +531,14 @@ export default function Discovery() {
         <CardContent>
           {lootLog.length === 0 ? (
             <p className="text-white/50 text-center py-4 font-jetbrains">
-              Откройте кэш, чтобы увидеть выпавшие модификаторы
+              Откройте кэш, чтобы увидеть выпавшие предметы
             </p>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
               {lootLog.map((entry) => {
-                const tierColors: Record<number, string> = {
-                  1: "text-gray-400 border-gray-400/30 bg-gray-400/5",
-                  2: "text-blue-400 border-blue-400/30 bg-blue-400/5",
-                  3: "text-purple-400 border-purple-400/30 bg-purple-400/5",
-                  4: "text-yellow-400 border-yellow-400/30 bg-yellow-400/5",
-                };
-                const tierNames: Record<number, string> = {
-                  1: "Обычный",
-                  2: "Редкий",
-                  3: "Легендарный",
-                  4: "Мифический",
-                };
-                const colorClass =
-                  tierColors[entry.rarityTier] ??
-                  "text-white border-white/20 bg-white/5";
-                const assetUrl = getModifierAssetUrl(entry.modifierType);
+                const colorClass = getLootItemColor(entry);
+                const assetUrl = getLootAssetUrl(entry);
+                const typeLabel = getLootTypeLabel(entry);
                 return (
                   <div
                     key={entry.id}
@@ -486,29 +549,25 @@ export default function Discovery() {
                         {assetUrl ? (
                           <img
                             src={assetUrl}
-                            alt={entry.modifierType}
+                            alt={entry.displayName || entry.itemId}
                             className="w-9 h-9 object-contain"
                           />
                         ) : (
                           <span className="text-xl">
-                            {entry.rarityTier === 4
-                              ? "🌟"
-                              : entry.rarityTier === 3
-                                ? "💎"
-                                : entry.rarityTier === 2
-                                  ? "🔵"
-                                  : "⚪"}
+                            {entry.itemType === "crystal"
+                              ? "💎"
+                              : entry.itemType === "booster"
+                                ? "⚡"
+                                : "🔵"}
                           </span>
                         )}
                       </div>
                       <div>
                         <p className="text-white font-medium font-jetbrains text-sm">
-                          {entry.modifierType}
+                          {entry.displayName || entry.itemId}
                         </p>
                         <p className="text-white/50 text-xs font-jetbrains">
-                          {tierNames[entry.rarityTier] ?? "Неизвестный"} • +
-                          {(entry.multiplierValue * 100 - 100).toFixed(0)}% •
-                          Кэш #{entry.cacheId} (Tier {entry.cacheTier})
+                          {typeLabel}
                         </p>
                       </div>
                     </div>
