@@ -55,7 +55,7 @@ const BIOME_MODEL_MAP: Record<string, string> = {
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_AETHER.glb",
 };
 
-// V.504 — FINAL: ACES Narkowicz + Luma-Sharpen + Glints (soft power curve)
+// V.505 — FINAL: ACES Narkowicz + Luma-Sharpen + Glints Engine v505
 const COMPOSITE_SHADER = {
   uniforms: {
     baseTexture: { value: null as THREE.Texture | null },
@@ -101,20 +101,23 @@ const COMPOSITE_SHADER = {
         float edge = 4.0 * lumaC - lumaL - lumaR - lumaU - lumaD;
         vec3 baseRGB = center + (edge * sharpness);
 
-        // 2. Bloom & Glints
-        // glintThreshold = 0.85: targets bright specular highlights on metal/gloss only.
-        // glintStrength = 1.2: subtle sparkles for visual balance.
+        // 2. Glints Engine v505
+        // Source: baseRGB (baseTexture contains full scene — Layer 0 metal specular included).
+        // bloomTexture contains only Layer 1 emissive — metal specular is NOT there.
+        // Output: neutral white vec3(highlight) — no mesh color tint, no square pixel artifact.
+        // Threshold 0.91: triggers only on extreme specular peaks, not ambient surfaces.
+        // Cubic curve pow(3.0): near-zero below threshold, sharp spike only at true peaks.
+        // Result: rare, sharp, clean white sparks on metal highlights only.
         vec3 bloomRGB = texture2D(bloomTexture, vUv).rgb;
-        float glintThreshold = 0.85;
-        float glintStrength = 1.2;
         float luma = getLuma(baseRGB);
-        float highlight = max(0.0, luma - glintThreshold) * glintStrength;
-        // Soft power curve: glints appear only at peaks, fade quickly below threshold
-        highlight = highlight * highlight;
-        vec3 finalBloom = bloomRGB + (baseRGB * highlight);
+        float glintThreshold = 0.91;
+        float glintStrength = 12.0;
+        float highlight = max(0.0, luma - glintThreshold);
+        highlight = pow(highlight, 3.0) * glintStrength;
+        vec3 finalGlints = vec3(highlight); // neutral white — no color bleed from mesh
 
         // 3. Composite & ToneMapping
-        vec3 color = baseRGB + finalBloom;
+        vec3 color = baseRGB + bloomRGB + finalGlints;
         gl_FragColor = vec4(toneMapACES(color), 1.0);
     }
   `,
@@ -140,7 +143,7 @@ function CameraLayerSetup() {
   return null;
 }
 
-// Camera-linked directional key light — intensity updated to Math.PI * 0.65 (Step 5)
+// Camera-linked directional key light — V.505: intensity Math.PI * 0.65
 function KeyLightSync() {
   useFrame(({ camera }) => {
     if (keyLightRef.current) {
@@ -164,7 +167,7 @@ function KeyLightSync() {
   );
 }
 
-// Static sun light component — exposes shared ref for bloom isolation (Step 5)
+// Static sun light — exposes shared ref for bloom isolation (V.505 Step 5)
 function SunLightSync() {
   return (
     <directionalLight
@@ -315,11 +318,11 @@ function SelectiveBloomEffect() {
     const bloomRenderPass = new RenderPass(scene, camera);
     bloomComposer.addPass(bloomRenderPass);
 
-    // Step 2: Updated bloom config
+    // V.505 Step 2: bloom config — intensity: 0.85, radius: 0.18, threshold: 0.4
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(size.width / 2, size.height / 2),
       0.85, // intensity
-      0.3, // radius
+      0.18, // radius
       0.4, // luminanceThreshold
     );
     if ("luminanceSmoothing" in bloomPass) {
@@ -335,7 +338,7 @@ function SelectiveBloomEffect() {
     const finalRenderPass = new RenderPass(scene, camera);
     finalComposer.addPass(finalRenderPass);
 
-    // Step 3: Composite ShaderPass with V.504 shader
+    // V.505 Step 3: Composite ShaderPass with Glints Engine v505
     const compositePass = new ShaderPass(
       new THREE.ShaderMaterial({
         uniforms: {
@@ -369,7 +372,7 @@ function SelectiveBloomEffect() {
   useFrame((state) => {
     if (!bloomComposerRef.current || !finalComposerRef.current) return;
 
-    // Step 4: Update composite pass uniforms BEFORE rendering
+    // V.505 Step 4: Update composite pass uniforms BEFORE rendering
     const finalPasses = (finalComposerRef.current as any).passes;
     const compositePass = finalPasses?.find(
       (p: any) => p.material?.uniforms?.resolution,
@@ -384,15 +387,32 @@ function SelectiveBloomEffect() {
         bloomComposerRef.current.renderTarget2.texture;
     }
 
-    // Step 5: Disable both directional lights during bloom pass
-    // Prevents specular highlights on metallic/glossy Layer-1 meshes from bleeding into bloom buffer
-    if (keyLightRef.current) keyLightRef.current.intensity = 0;
-    if (sunLightRef.current) sunLightRef.current.intensity = 0;
+    // V.505 Step 5: Fallback via scene graph name if ref didn't wire
+    const keyLight =
+      keyLightRef.current ??
+      (scene.getObjectByName("KeyLight") as THREE.DirectionalLight | null);
+    const sunLight =
+      sunLightRef.current ??
+      (scene.getObjectByName("SunLight") as THREE.DirectionalLight | null);
+
+    // Disable both lights during bloom pass
+    // Prevents specular on metallic/glossy meshes from bleeding into bloom buffer
+    if (keyLight) keyLight.intensity = 0;
+    if (sunLight) sunLight.intensity = 0;
+
+    // Disable HDRI during bloom pass
+    // HDRI reflections on metallic meshes would otherwise bleed into bloom buffer
+    const savedEnv = scene.environment;
+    scene.environment = null;
+
     camera.layers.set(1);
     bloomComposerRef.current.render();
-    // Restore lights for final render
-    if (keyLightRef.current) keyLightRef.current.intensity = Math.PI * 0.65;
-    if (sunLightRef.current) sunLightRef.current.intensity = Math.PI * 0.4;
+
+    // Restore everything for final render
+    if (keyLight) keyLight.intensity = Math.PI * 0.65;
+    if (sunLight) sunLight.intensity = Math.PI * 0.4;
+    scene.environment = savedEnv;
+
     camera.layers.enable(0);
     camera.layers.enable(1);
     finalComposerRef.current.render();
@@ -460,7 +480,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           alpha: false,
         }}
         onCreated={({ gl }) => {
-          // Step 1: Remove AgX, use NoToneMapping (ACES is handled in shader)
+          // V.505 Step 1: Remove AgX, use NoToneMapping (ACES handled in shader)
           gl.toneMapping = THREE.NoToneMapping;
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.setClearAlpha(1);

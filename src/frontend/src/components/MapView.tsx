@@ -181,6 +181,9 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
 
   const content = (
     <div style={containerStyle}>
+      {/* Opaque black backdrop — blocks body purple gradient completely */}
+      <div style={backdropStyle} />
+
       {(!isEngineReady || !isDataLoaded) && (
         <div style={loadingOverlayStyle}>
           <div className="cyber-loader">
@@ -191,14 +194,22 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
       )}
       <div
         ref={mapContainerRef}
-        style={{ width: "100%", height: "100%", background: "#000" }}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          background: "#000000",
+        }}
       />
       <button type="button" onClick={onClose} style={closeButtonStyle}>
         ✕ EXIT
       </button>
 
       <style>{`
-        .leaflet-container { background: #000 !important; cursor: crosshair; }
+        .leaflet-container { background: #000000 !important; cursor: crosshair; }
+        .leaflet-image-layer { will-change: auto !important; }
         .beam-neon {
           stroke-dasharray: 12, 6;
           animation: beamFlow 0.8s linear infinite;
@@ -220,19 +231,39 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
   return ReactDOM.createPortal(content, document.body);
 };
 
+// Explicit top/left/right/bottom + vw/vh — "inset" shorthand can fail in some browsers
 const containerStyle: React.CSSProperties = {
   position: "fixed",
-  inset: 0,
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  width: "100vw",
+  height: "100dvh",
   zIndex: 100000,
-  background: "#000",
   overflow: "hidden",
   touchAction: "none",
 };
+
+// Dedicated black backdrop rendered first — covers body purple gradient
+const backdropStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "100%",
+  background: "#000000",
+  zIndex: 0,
+};
+
 const loadingOverlayStyle: React.CSSProperties = {
   position: "absolute",
-  inset: 0,
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "100%",
   zIndex: 100005,
-  background: "#000",
+  background: "#000000",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
