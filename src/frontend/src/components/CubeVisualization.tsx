@@ -13,7 +13,6 @@ interface CubeVisualizationProps {
 }
 
 const BIOME_MODEL_MAP: Record<string, string> = {
-  // Original frontend keys
   FOREST_VALLEY:
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/FOREST_VALLEY_KTX2.glb",
   ISLAND_ARCHIPELAGO:
@@ -28,7 +27,6 @@ const BIOME_MODEL_MAP: Record<string, string> = {
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_VOID.glb",
   MYTHIC_AETHER:
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_AETHER.glb",
-  // Backend biome name aliases (backend returns: Forest, Desert, Ocean, Mountain, Tundra, Volcano, Mar, etc.)
   Forest:
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/FOREST_VALLEY_KTX2.glb",
   Desert:
@@ -41,7 +39,6 @@ const BIOME_MODEL_MAP: Record<string, string> = {
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/SNOW_PEAK.glb",
   Volcano:
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/VOLCANIC_CRAG.glb",
-  // Additional aliases for all possible backend values
   Mar: "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/ISLAND_ARCHIPELAGO.glb",
   Sea: "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/ISLAND_ARCHIPELAGO.glb",
   Island:
@@ -58,7 +55,7 @@ const BIOME_MODEL_MAP: Record<string, string> = {
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_AETHER.glb",
 };
 
-// Composite shader: ACES Tonemapping + Luma-Sharpen + Glints
+// V.504 — FINAL: ACES Narkowicz + Luma-Sharpen + Glints (soft power curve)
 const COMPOSITE_SHADER = {
   uniforms: {
     baseTexture: { value: null as THREE.Texture | null },
@@ -105,10 +102,15 @@ const COMPOSITE_SHADER = {
         vec3 baseRGB = center + (edge * sharpness);
 
         // 2. Bloom & Glints
+        // glintThreshold = 0.85: targets bright specular highlights on metal/gloss only.
+        // glintStrength = 1.2: subtle sparkles for visual balance.
         vec3 bloomRGB = texture2D(bloomTexture, vUv).rgb;
-        float glintThreshold = 2.5;
-        float glintStrength = 3.0;
-        float highlight = max(0.0, getLuma(baseRGB) - glintThreshold) * glintStrength;
+        float glintThreshold = 0.85;
+        float glintStrength = 1.2;
+        float luma = getLuma(baseRGB);
+        float highlight = max(0.0, luma - glintThreshold) * glintStrength;
+        // Soft power curve: glints appear only at peaks, fade quickly below threshold
+        highlight = highlight * highlight;
         vec3 finalBloom = bloomRGB + (baseRGB * highlight);
 
         // 3. Composite & ToneMapping
@@ -118,26 +120,31 @@ const COMPOSITE_SHADER = {
   `,
 };
 
-// Camera layer setup: enable both Layer 0 (default) and Layer 1 (bloom targets)
+// Module-level shared light refs for bloom isolation (Step 5)
+const keyLightRef: { current: THREE.DirectionalLight | null } = {
+  current: null,
+};
+const sunLightRef: { current: THREE.DirectionalLight | null } = {
+  current: null,
+};
+
+// Camera layer setup
 function CameraLayerSetup() {
   const { camera } = useThree();
 
   useEffect(() => {
     camera.layers.enable(0);
     camera.layers.enable(1);
-    console.log("[CameraLayerSetup] Camera now sees Layer 0 and Layer 1");
   }, [camera]);
 
   return null;
 }
 
-// Camera-linked directional key light
+// Camera-linked directional key light — intensity updated to Math.PI * 0.65 (Step 5)
 function KeyLightSync() {
-  const keyLight = useRef<THREE.DirectionalLight>(null);
-
   useFrame(({ camera }) => {
-    if (keyLight.current) {
-      keyLight.current.position.set(
+    if (keyLightRef.current) {
+      keyLightRef.current.position.set(
         camera.position.x + 10,
         camera.position.y + 15,
         camera.position.z + 10,
@@ -147,15 +154,32 @@ function KeyLightSync() {
 
   return (
     <directionalLight
-      ref={keyLight}
+      ref={(light) => {
+        keyLightRef.current = light;
+      }}
       name="KeyLight"
-      intensity={Math.PI * 0.8}
+      intensity={Math.PI * 0.65}
       color="#ffffff"
     />
   );
 }
 
-// Full FBM Shader with 4-color neon palette
+// Static sun light component — exposes shared ref for bloom isolation (Step 5)
+function SunLightSync() {
+  return (
+    <directionalLight
+      ref={(light) => {
+        sunLightRef.current = light;
+      }}
+      name="SunLight"
+      position={[-10, 20, -15]}
+      intensity={Math.PI * 0.4}
+      color="#ffe4b5"
+    />
+  );
+}
+
+// Full FBM Shader background
 const BackgroundSphere = () => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
@@ -280,7 +304,7 @@ function SelectiveBloomEffect() {
   const finalComposerRef = useRef<EffectComposer | null>(null);
   const bloomPassRef = useRef<UnrealBloomPass | null>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: size used only for initial composer setup, resize handled separately
+  // biome-ignore lint/correctness/useExhaustiveDependencies: size used only for initial composer setup
   useEffect(() => {
     gl.setClearAlpha(1);
 
@@ -291,11 +315,12 @@ function SelectiveBloomEffect() {
     const bloomRenderPass = new RenderPass(scene, camera);
     bloomComposer.addPass(bloomRenderPass);
 
+    // Step 2: Updated bloom config
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(size.width / 2, size.height / 2),
-      0.8, // intensity
-      0.65, // radius
-      0.1, // luminanceThreshold
+      0.85, // intensity
+      0.3, // radius
+      0.4, // luminanceThreshold
     );
     if ("luminanceSmoothing" in bloomPass) {
       (bloomPass as any).luminanceSmoothing = 0.1;
@@ -310,6 +335,7 @@ function SelectiveBloomEffect() {
     const finalRenderPass = new RenderPass(scene, camera);
     finalComposer.addPass(finalRenderPass);
 
+    // Step 3: Composite ShaderPass with V.504 shader
     const compositePass = new ShaderPass(
       new THREE.ShaderMaterial({
         uniforms: {
@@ -343,7 +369,7 @@ function SelectiveBloomEffect() {
   useFrame((state) => {
     if (!bloomComposerRef.current || !finalComposerRef.current) return;
 
-    // Update composite pass uniforms
+    // Step 4: Update composite pass uniforms BEFORE rendering
     const finalPasses = (finalComposerRef.current as any).passes;
     const compositePass = finalPasses?.find(
       (p: any) => p.material?.uniforms?.resolution,
@@ -358,8 +384,15 @@ function SelectiveBloomEffect() {
         bloomComposerRef.current.renderTarget2.texture;
     }
 
+    // Step 5: Disable both directional lights during bloom pass
+    // Prevents specular highlights on metallic/glossy Layer-1 meshes from bleeding into bloom buffer
+    if (keyLightRef.current) keyLightRef.current.intensity = 0;
+    if (sunLightRef.current) sunLightRef.current.intensity = 0;
     camera.layers.set(1);
     bloomComposerRef.current.render();
+    // Restore lights for final render
+    if (keyLightRef.current) keyLightRef.current.intensity = Math.PI * 0.65;
+    if (sunLightRef.current) sunLightRef.current.intensity = Math.PI * 0.4;
     camera.layers.enable(0);
     camera.layers.enable(1);
     finalComposerRef.current.render();
@@ -368,19 +401,10 @@ function SelectiveBloomEffect() {
   return null;
 }
 
-// Normalize biome value: backend may return a Motoko variant object like { Forest: null }
-// or a plain string like "Forest". Extract the string key in either case.
 function normalizeBiome(biome: string | undefined): string | undefined {
   if (!biome) return undefined;
   if (typeof biome === "object" && biome !== null) {
-    // Motoko variant: { Forest: null } → "Forest"
     const key = Object.keys(biome as Record<string, unknown>)[0];
-    console.log(
-      "[CubeVisualization] Motoko variant biome detected:",
-      biome,
-      "→",
-      key,
-    );
     return key;
   }
   return biome;
@@ -436,6 +460,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           alpha: false,
         }}
         onCreated={({ gl }) => {
+          // Step 1: Remove AgX, use NoToneMapping (ACES is handled in shader)
           gl.toneMapping = THREE.NoToneMapping;
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.setClearAlpha(1);
@@ -457,12 +482,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
             groundColor="#3a3a3a"
           />
           <KeyLightSync />
-          <directionalLight
-            name="SunLight"
-            position={[-10, 20, -15]}
-            intensity={Math.PI * 0.4}
-            color="#ffe4b5"
-          />
+          <SunLightSync />
           <OrbitControls makeDefault />
           <SelectiveBloomEffect />
         </Suspense>

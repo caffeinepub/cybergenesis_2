@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { LandData } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
@@ -95,7 +96,8 @@ const MapView = ({
     return [y, x];
   }, []);
 
-  // 3. MAP INITIALIZATION
+  // 3. MAP INITIALIZATION — runs only once when Leaflet is ready
+  // Intentionally does NOT depend on `lands` to avoid re-init on data arrival
   useEffect(() => {
     if (
       !isEngineReady ||
@@ -121,41 +123,14 @@ const MapView = ({
     ];
     L.imageOverlay(RAW_MAP_URL, bounds).addTo(map);
     map.setMaxBounds(bounds);
-
-    if (lands) {
-      let myFirstLandCoords: number[] | null = null;
-
-      for (const land of lands) {
-        const coords = getPointInBiome(Number(land.landId), land.biome);
-        const isOwner = land.principal?.toString() === principalId;
-
-        if (isOwner && !myFirstLandCoords) myFirstLandCoords = coords;
-
-        const color = isOwner ? getBiomeColor(land.biome) : "#ffffff";
-        const weight = isOwner ? 3 : 0.4;
-        const opacity = isOwner ? 0.9 : 0.25;
-
-        L.polyline([VORTEX_CENTER, coords], {
-          color,
-          weight,
-          opacity,
-          className: isOwner
-            ? `beam-owned-${land.biome.toLowerCase()}`
-            : "beam-other",
-        }).addTo(map);
-      }
-
-      if (myFirstLandCoords) {
-        map.flyTo(myFirstLandCoords, 2, { duration: 2 });
-      } else {
-        map.fitBounds(bounds);
-      }
-      setIsDataLoaded(true);
-    }
+    map.fitBounds(bounds);
 
     setTimeout(() => {
       if (mapRef.current) mapRef.current.invalidateSize();
     }, 300);
+
+    // Map is ready — hide loading overlay immediately
+    setIsDataLoaded(true);
 
     return () => {
       if (mapRef.current) {
@@ -163,9 +138,44 @@ const MapView = ({
         mapRef.current = null;
       }
     };
-  }, [isEngineReady, lands, principalId, getPointInBiome]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEngineReady]);
 
-  return (
+  // 4. MARKER LAYER — adds beams when lands data arrives (separate from map init)
+  useEffect(() => {
+    if (!mapRef.current || !window.L || !lands) return;
+
+    const L = window.L;
+    const map = mapRef.current;
+    let myFirstLandCoords: number[] | null = null;
+
+    for (const land of lands) {
+      const coords = getPointInBiome(Number(land.landId), land.biome);
+      const isOwner = land.principal?.toString() === principalId;
+
+      if (isOwner && !myFirstLandCoords) myFirstLandCoords = coords;
+
+      const color = isOwner ? getBiomeColor(land.biome) : "#ffffff";
+      const weight = isOwner ? 3 : 0.4;
+      const opacity = isOwner ? 0.9 : 0.25;
+
+      L.polyline([VORTEX_CENTER, coords], {
+        color,
+        weight,
+        opacity,
+        className: isOwner
+          ? `beam-owned-${land.biome.toLowerCase()}`
+          : "beam-other",
+      }).addTo(map);
+    }
+
+    if (myFirstLandCoords) {
+      map.flyTo(myFirstLandCoords, 2, { duration: 2 });
+    }
+  }, [lands, principalId, getPointInBiome]);
+
+  // Render via Portal to document.body — guaranteed above ALL parent stacking contexts
+  return createPortal(
     <div style={containerStyle}>
       {(!isEngineReady || !isDataLoaded) && (
         <div style={loadingOverlayStyle}>
@@ -207,7 +217,8 @@ const MapView = ({
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         @keyframes slide { 0% { transform: scaleX(0); } 50% { transform: scaleX(1); } 100% { transform: scaleX(0); } }
       `}</style>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
@@ -216,8 +227,8 @@ const containerStyle: React.CSSProperties = {
   top: 0,
   left: 0,
   width: "100vw",
-  height: "100dvh",
-  zIndex: 9999,
+  height: "100vh",
+  zIndex: 99999,
   background: "#000",
   overflow: "hidden",
   touchAction: "none",
@@ -226,7 +237,7 @@ const containerStyle: React.CSSProperties = {
 const loadingOverlayStyle: React.CSSProperties = {
   position: "absolute",
   inset: 0,
-  zIndex: 10005,
+  zIndex: 100005,
   background: "#000",
   display: "flex",
   alignItems: "center",
@@ -238,7 +249,7 @@ const closeButtonStyle: React.CSSProperties = {
   position: "absolute",
   top: "30px",
   right: "30px",
-  zIndex: 10001,
+  zIndex: 100001,
   padding: "12px 24px",
   background: "rgba(0,255,65,0.1)",
   color: "#00ff41",
