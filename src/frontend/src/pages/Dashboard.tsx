@@ -142,7 +142,7 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard-container flex flex-col min-h-screen bg-transparent">
-      {isMapOpen && <MapView landData={currentLand} onClose={handleMapClose} />}
+      {isMapOpen && <MapView onClose={handleMapClose} />}
 
       <div className="dashboard min-h-screen text-white relative overflow-hidden">
         <div className="relative z-10 container mx-auto px-4 py-8">
