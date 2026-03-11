@@ -55,13 +55,13 @@ const BIOME_MODEL_MAP: Record<string, string> = {
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_AETHER.glb",
 };
 
-// V.505 — FINAL: ACES Narkowicz + Luma-Sharpen + Glints Engine v505
+// V.506 — FINAL: ACES Narkowicz + Luma-Sharpen + Glints Engine v506
 const COMPOSITE_SHADER = {
   uniforms: {
     baseTexture: { value: null as THREE.Texture | null },
     bloomTexture: { value: null as THREE.Texture | null },
     resolution: { value: new THREE.Vector2() },
-    exposure: { value: 1.0 },
+    exposure: { value: 1.1 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -101,19 +101,20 @@ const COMPOSITE_SHADER = {
         float edge = 4.0 * lumaC - lumaL - lumaR - lumaU - lumaD;
         vec3 baseRGB = center + (edge * sharpness);
 
-        // 2. Glints Engine v505
-        // Source: baseRGB (baseTexture contains full scene — Layer 0 metal specular included).
-        // bloomTexture contains only Layer 1 emissive — metal specular is NOT there.
-        // Output: neutral white vec3(highlight) — no mesh color tint, no square pixel artifact.
-        // Threshold 0.91: triggers only on extreme specular peaks, not ambient surfaces.
-        // Cubic curve pow(3.0): near-zero below threshold, sharp spike only at true peaks.
-        // Result: rare, sharp, clean white sparks on metal highlights only.
+        // 2. Glints Engine v506
+        // Source: center (raw unsharpened pixel) — fully decoupled from sharpening.
+        // Using center instead of baseRGB eliminates shimmer/ripple caused by
+        // sharpening artificially boosting edge luma and triggering glint threshold.
+        // Threshold 0.78: calibrated for ACES-compressed specular peaks on metallic surfaces.
+        // Quadratic curve pow(2.0): smooth premium sparkle, no conflict with sharpening edges.
+        // Strength 7.0: compensates for lower threshold, prevents white flooding.
+        // Result: rare, sharp, clean white sparks on metal highlights only. No shimmer/ripple.
         vec3 bloomRGB = texture2D(bloomTexture, vUv).rgb;
-        float luma = getLuma(baseRGB);
-        float glintThreshold = 0.91;
-        float glintStrength = 12.0;
+        float luma = getLuma(center);
+        float glintThreshold = 0.78;
+        float glintStrength = 7.0;
         float highlight = max(0.0, luma - glintThreshold);
-        highlight = pow(highlight, 3.0) * glintStrength;
+        highlight = pow(highlight, 2.0) * glintStrength;
         vec3 finalGlints = vec3(highlight); // neutral white — no color bleed from mesh
 
         // 3. Composite & ToneMapping
@@ -143,7 +144,7 @@ function CameraLayerSetup() {
   return null;
 }
 
-// Camera-linked directional key light — V.505: intensity Math.PI * 0.65
+// Camera-linked directional key light — V.506: intensity Math.PI * 0.8
 function KeyLightSync() {
   useFrame(({ camera }) => {
     if (keyLightRef.current) {
@@ -161,13 +162,13 @@ function KeyLightSync() {
         keyLightRef.current = light;
       }}
       name="KeyLight"
-      intensity={Math.PI * 0.65}
+      intensity={Math.PI * 0.8}
       color="#ffffff"
     />
   );
 }
 
-// Static sun light — exposes shared ref for bloom isolation (V.505 Step 5)
+// Static sun light — exposes shared ref for bloom isolation (V.506 Step 5)
 function SunLightSync() {
   return (
     <directionalLight
@@ -318,7 +319,7 @@ function SelectiveBloomEffect() {
     const bloomRenderPass = new RenderPass(scene, camera);
     bloomComposer.addPass(bloomRenderPass);
 
-    // V.505 Step 2: bloom config — intensity: 0.85, radius: 0.18, threshold: 0.4
+    // V.506 Step 2: bloom config — intensity: 0.85, radius: 0.18, threshold: 0.4
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(size.width / 2, size.height / 2),
       0.85, // intensity
@@ -338,14 +339,14 @@ function SelectiveBloomEffect() {
     const finalRenderPass = new RenderPass(scene, camera);
     finalComposer.addPass(finalRenderPass);
 
-    // V.505 Step 3: Composite ShaderPass with Glints Engine v505
+    // V.506 Step 3: Composite ShaderPass with Glints Engine v506
     const compositePass = new ShaderPass(
       new THREE.ShaderMaterial({
         uniforms: {
           baseTexture: { value: null },
           bloomTexture: { value: bloomComposer.renderTarget2.texture },
           resolution: { value: new THREE.Vector2() },
-          exposure: { value: 1.0 },
+          exposure: { value: 1.1 },
         },
         vertexShader: COMPOSITE_SHADER.vertexShader,
         fragmentShader: COMPOSITE_SHADER.fragmentShader,
@@ -372,7 +373,7 @@ function SelectiveBloomEffect() {
   useFrame((state) => {
     if (!bloomComposerRef.current || !finalComposerRef.current) return;
 
-    // V.505 Step 4: Update composite pass uniforms BEFORE rendering
+    // V.506 Step 4: Update composite pass uniforms BEFORE rendering
     const finalPasses = (finalComposerRef.current as any).passes;
     const compositePass = finalPasses?.find(
       (p: any) => p.material?.uniforms?.resolution,
@@ -387,7 +388,7 @@ function SelectiveBloomEffect() {
         bloomComposerRef.current.renderTarget2.texture;
     }
 
-    // V.505 Step 5: Fallback via scene graph name if ref didn't wire
+    // V.506 Step 5: Fallback via scene graph name if ref didn't wire
     const keyLight =
       keyLightRef.current ??
       (scene.getObjectByName("KeyLight") as THREE.DirectionalLight | null);
@@ -409,7 +410,7 @@ function SelectiveBloomEffect() {
     bloomComposerRef.current.render();
 
     // Restore everything for final render
-    if (keyLight) keyLight.intensity = Math.PI * 0.65;
+    if (keyLight) keyLight.intensity = Math.PI * 0.8;
     if (sunLight) sunLight.intensity = Math.PI * 0.4;
     scene.environment = savedEnv;
 
@@ -480,7 +481,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           alpha: false,
         }}
         onCreated={({ gl }) => {
-          // V.505 Step 1: Remove AgX, use NoToneMapping (ACES handled in shader)
+          // V.506 Step 1: Remove AgX, use NoToneMapping (ACES handled in shader)
           gl.toneMapping = THREE.NoToneMapping;
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.setClearAlpha(1);
@@ -493,7 +494,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           {modelUrl && <LandModel modelUrl={modelUrl} biome={biome} />}
           <Environment
             files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/artist_workshop_1k.hdr"
-            environmentIntensity={1.0}
+            environmentIntensity={1.3}
             blur={0}
           />
           <hemisphereLight

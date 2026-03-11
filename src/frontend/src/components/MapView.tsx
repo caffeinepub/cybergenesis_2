@@ -231,7 +231,7 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
   return ReactDOM.createPortal(content, document.body);
 };
 
-// Explicit top/left/right/bottom + vw/vh — "inset" shorthand can fail in some browsers
+// Explicit top/left/right/bottom + vw/vh — background: #000000 blocks body purple gradient
 const containerStyle: React.CSSProperties = {
   position: "fixed",
   top: 0,
@@ -241,6 +241,7 @@ const containerStyle: React.CSSProperties = {
   width: "100vw",
   height: "100dvh",
   zIndex: 100000,
+  background: "#000000",
   overflow: "hidden",
   touchAction: "none",
 };
