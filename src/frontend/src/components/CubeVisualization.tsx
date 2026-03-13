@@ -55,13 +55,14 @@ const BIOME_MODEL_MAP: Record<string, string> = {
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_AETHER.glb",
 };
 
-// V.506 — FINAL: ACES Narkowicz + Luma-Sharpen + Glints Engine v506
+// V.507 — Glints Engine v507: animated, HDR-safe, decoupled from sharpen
 const COMPOSITE_SHADER = {
   uniforms: {
     baseTexture: { value: null as THREE.Texture | null },
     bloomTexture: { value: null as THREE.Texture | null },
     resolution: { value: new THREE.Vector2() },
     exposure: { value: 1.1 },
+    time: { value: 0.0 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -75,56 +76,57 @@ const COMPOSITE_SHADER = {
     uniform sampler2D bloomTexture;
     uniform vec2 resolution;
     uniform float exposure;
+    uniform float time;
     varying vec2 vUv;
 
     float getLuma(vec3 v) { return dot(v, vec3(0.299, 0.587, 0.114)); }
 
     vec3 toneMapACES(vec3 color) {
-        float tA = 2.51; float tB = 0.03; float tC = 2.43;
-        float tD = 0.59; float tE = 0.14;
-        vec3 x = color * exposure;
-        return clamp((x * (tA * x + tB)) / (x * (tC * x + tD) + tE), 0.0, 1.0);
+      float tA = 2.51; float tB = 0.03; float tC = 2.43;
+      float tD = 0.59; float tE = 0.14;
+      vec3 x = color * exposure;
+      return clamp((x * (tA * x + tB)) / (x * (tC * x + tD) + tE), 0.0, 1.0);
+    }
+
+    float glintHash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
     }
 
     void main() {
-        vec2 texel = 1.0 / max(resolution, vec2(1.0));
-        vec3 center = texture2D(baseTexture, vUv).rgb;
+      vec2 texel = 1.0 / max(resolution, vec2(1.0));
+      vec3 center = texture2D(baseTexture, vUv).rgb;
 
-        // 1. Luma-based Sharpen
-        float lumaC = getLuma(center);
-        float lumaL = getLuma(texture2D(baseTexture, vUv - vec2(texel.x, 0.0)).rgb);
-        float lumaR = getLuma(texture2D(baseTexture, vUv + vec2(texel.x, 0.0)).rgb);
-        float lumaU = getLuma(texture2D(baseTexture, vUv - vec2(0.0, texel.y)).rgb);
-        float lumaD = getLuma(texture2D(baseTexture, vUv + vec2(0.0, texel.y)).rgb);
+      // 1. Luma-based Sharpen
+      float lumaC = getLuma(center);
+      float lumaL = getLuma(texture2D(baseTexture, vUv - vec2(texel.x, 0.0)).rgb);
+      float lumaR = getLuma(texture2D(baseTexture, vUv + vec2(texel.x, 0.0)).rgb);
+      float lumaU = getLuma(texture2D(baseTexture, vUv - vec2(0.0, texel.y)).rgb);
+      float lumaD = getLuma(texture2D(baseTexture, vUv + vec2(0.0, texel.y)).rgb);
+      float sharpness = 0.15;
+      float edge = 4.0 * lumaC - lumaL - lumaR - lumaU - lumaD;
+      vec3 baseRGB = center + (edge * sharpness);
 
-        float sharpness = 0.18;
-        float edge = 4.0 * lumaC - lumaL - lumaR - lumaU - lumaD;
-        vec3 baseRGB = center + (edge * sharpness);
+      // 2. Glints Engine v507 — animated, HDR-safe, decoupled from sharpen
+      vec3 bloomRGB = texture2D(bloomTexture, vUv).rgb;
+      vec3 centerSafe = clamp(center, 0.0, 1.0);
+      float luma = getLuma(centerSafe);
+      float glintThreshold = 0.85;
+      float glintStrength = 40.0;
+      vec2 sparkCell = floor(vUv * resolution);
+      float noise = glintHash(sparkCell + floor(time * 12.0));
+      float sparkMask = step(0.93, noise);
+      float highlight = max(0.0, luma - glintThreshold);
+      highlight = pow(highlight, 2.0) * glintStrength * sparkMask;
+      vec3 finalGlints = centerSafe * highlight;
 
-        // 2. Glints Engine v506
-        // Source: center (raw unsharpened pixel) — fully decoupled from sharpening.
-        // Using center instead of baseRGB eliminates shimmer/ripple caused by
-        // sharpening artificially boosting edge luma and triggering glint threshold.
-        // Threshold 0.78: calibrated for ACES-compressed specular peaks on metallic surfaces.
-        // Quadratic curve pow(2.0): smooth premium sparkle, no conflict with sharpening edges.
-        // Strength 7.0: compensates for lower threshold, prevents white flooding.
-        // Result: rare, sharp, clean white sparks on metal highlights only. No shimmer/ripple.
-        vec3 bloomRGB = texture2D(bloomTexture, vUv).rgb;
-        float luma = getLuma(center);
-        float glintThreshold = 0.78;
-        float glintStrength = 7.0;
-        float highlight = max(0.0, luma - glintThreshold);
-        highlight = pow(highlight, 2.0) * glintStrength;
-        vec3 finalGlints = vec3(highlight); // neutral white — no color bleed from mesh
-
-        // 3. Composite & ToneMapping
-        vec3 color = baseRGB + bloomRGB + finalGlints;
-        gl_FragColor = vec4(toneMapACES(color), 1.0);
+      // 3. Composite & ToneMapping
+      vec3 color = baseRGB + bloomRGB + finalGlints;
+      gl_FragColor = vec4(toneMapACES(color), 1.0);
     }
   `,
 };
 
-// Module-level shared light refs for bloom isolation (Step 5)
+// Module-level shared light refs for bloom isolation
 const keyLightRef: { current: THREE.DirectionalLight | null } = {
   current: null,
 };
@@ -144,7 +146,7 @@ function CameraLayerSetup() {
   return null;
 }
 
-// Camera-linked directional key light — V.506: intensity Math.PI * 0.8
+// Camera-linked directional key light
 function KeyLightSync() {
   useFrame(({ camera }) => {
     if (keyLightRef.current) {
@@ -168,17 +170,29 @@ function KeyLightSync() {
   );
 }
 
-// Static sun light — exposes shared ref for bloom isolation (V.506 Step 5)
+// "Налобный фонарь" — SunLight привязан к камере для подсветки рельефа под углом взгляда
 function SunLightSync() {
+  const localRef = useRef<THREE.DirectionalLight>(null!);
+
+  useFrame(({ camera }) => {
+    if (localRef.current) {
+      localRef.current.position.set(
+        camera.position.x,
+        camera.position.y,
+        camera.position.z + 5,
+      );
+    }
+  });
+
   return (
     <directionalLight
       ref={(light) => {
-        sunLightRef.current = light;
+        localRef.current = light!;
+        sunLightRef.current = light; // wire module-level ref for bloom isolation
       }}
       name="SunLight"
-      position={[-10, 20, -15]}
-      intensity={Math.PI * 0.4}
-      color="#ffe4b5"
+      intensity={Math.PI * 0.2}
+      color="#ffffff"
     />
   );
 }
@@ -319,7 +333,6 @@ function SelectiveBloomEffect() {
     const bloomRenderPass = new RenderPass(scene, camera);
     bloomComposer.addPass(bloomRenderPass);
 
-    // V.506 Step 2: bloom config — intensity: 0.85, radius: 0.18, threshold: 0.4
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(size.width / 2, size.height / 2),
       0.85, // intensity
@@ -339,7 +352,7 @@ function SelectiveBloomEffect() {
     const finalRenderPass = new RenderPass(scene, camera);
     finalComposer.addPass(finalRenderPass);
 
-    // V.506 Step 3: Composite ShaderPass with Glints Engine v506
+    // V.507: Composite ShaderPass with Glints Engine v507 + time uniform
     const compositePass = new ShaderPass(
       new THREE.ShaderMaterial({
         uniforms: {
@@ -347,6 +360,7 @@ function SelectiveBloomEffect() {
           bloomTexture: { value: bloomComposer.renderTarget2.texture },
           resolution: { value: new THREE.Vector2() },
           exposure: { value: 1.1 },
+          time: { value: 0.0 },
         },
         vertexShader: COMPOSITE_SHADER.vertexShader,
         fragmentShader: COMPOSITE_SHADER.fragmentShader,
@@ -373,7 +387,7 @@ function SelectiveBloomEffect() {
   useFrame((state) => {
     if (!bloomComposerRef.current || !finalComposerRef.current) return;
 
-    // V.506 Step 4: Update composite pass uniforms BEFORE rendering
+    // Update composite pass uniforms BEFORE rendering
     const finalPasses = (finalComposerRef.current as any).passes;
     const compositePass = finalPasses?.find(
       (p: any) => p.material?.uniforms?.resolution,
@@ -386,9 +400,10 @@ function SelectiveBloomEffect() {
       );
       mat.uniforms.bloomTexture.value =
         bloomComposerRef.current.renderTarget2.texture;
+      mat.uniforms.time.value = state.clock.elapsedTime;
     }
 
-    // V.506 Step 5: Fallback via scene graph name if ref didn't wire
+    // Fallback: if ref didn't wire — find by name in scene graph (guaranteed isolation)
     const keyLight =
       keyLightRef.current ??
       (scene.getObjectByName("KeyLight") as THREE.DirectionalLight | null);
@@ -397,12 +412,10 @@ function SelectiveBloomEffect() {
       (scene.getObjectByName("SunLight") as THREE.DirectionalLight | null);
 
     // Disable both lights during bloom pass
-    // Prevents specular on metallic/glossy meshes from bleeding into bloom buffer
     if (keyLight) keyLight.intensity = 0;
     if (sunLight) sunLight.intensity = 0;
 
     // Disable HDRI during bloom pass
-    // HDRI reflections on metallic meshes would otherwise bleed into bloom buffer
     const savedEnv = scene.environment;
     scene.environment = null;
 
@@ -411,7 +424,7 @@ function SelectiveBloomEffect() {
 
     // Restore everything for final render
     if (keyLight) keyLight.intensity = Math.PI * 0.8;
-    if (sunLight) sunLight.intensity = Math.PI * 0.4;
+    if (sunLight) sunLight.intensity = Math.PI * 0.2; // matches SunLightSync base intensity
     scene.environment = savedEnv;
 
     camera.layers.enable(0);
@@ -479,9 +492,10 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           antialias: true,
           powerPreference: "high-performance",
           alpha: false,
+          ...({ dithering: true } as any),
         }}
         onCreated={({ gl }) => {
-          // V.506 Step 1: Remove AgX, use NoToneMapping (ACES handled in shader)
+          // V.507 Step 1: Remove AgX, use NoToneMapping (ACES handled in shader)
           gl.toneMapping = THREE.NoToneMapping;
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.setClearAlpha(1);
@@ -494,7 +508,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           {modelUrl && <LandModel modelUrl={modelUrl} biome={biome} />}
           <Environment
             files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/artist_workshop_1k.hdr"
-            environmentIntensity={1.3}
+            environmentIntensity={1.45}
             blur={0}
           />
           <hemisphereLight
