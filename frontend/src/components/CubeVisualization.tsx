@@ -55,13 +55,13 @@ const BIOME_MODEL_MAP: Record<string, string> = {
     "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_AETHER.glb",
 };
 
-// V.507 — Glints Engine v507: animated, HDR-safe, decoupled from sharpen
+// CHANGE 1: Updated composite shader — sharpen with highlight limiter + AA-Safe HDR glints from bloomTexture
 const COMPOSITE_SHADER = {
   uniforms: {
     baseTexture: { value: null as THREE.Texture | null },
     bloomTexture: { value: null as THREE.Texture | null },
     resolution: { value: new THREE.Vector2() },
-    exposure: { value: 1.1 },
+    exposure: { value: 1.3 },
     time: { value: 0.0 },
   },
   vertexShader: `
@@ -96,7 +96,7 @@ const COMPOSITE_SHADER = {
       vec2 texel = 1.0 / max(resolution, vec2(1.0));
       vec3 center = texture2D(baseTexture, vUv).rgb;
 
-      // 1. Luma-based Sharpen
+      // 1. Luma-based Sharpen with highlight limiter
       float lumaC = getLuma(center);
       float lumaL = getLuma(texture2D(baseTexture, vUv - vec2(texel.x, 0.0)).rgb);
       float lumaR = getLuma(texture2D(baseTexture, vUv + vec2(texel.x, 0.0)).rgb);
@@ -104,20 +104,17 @@ const COMPOSITE_SHADER = {
       float lumaD = getLuma(texture2D(baseTexture, vUv + vec2(0.0, texel.y)).rgb);
       float sharpness = 0.15;
       float edge = 4.0 * lumaC - lumaL - lumaR - lumaU - lumaD;
-      vec3 baseRGB = center + (edge * sharpness);
+      float sharpLimiter = clamp(1.0 - pow(lumaC, 3.0), 0.0, 1.0);
+      vec3 baseRGB = center + (edge * sharpness * sharpLimiter);
 
-      // 2. Glints Engine v507 — animated, HDR-safe, decoupled from sharpen
+      // 2. Glints Engine — AA-Safe, HDR Sparks from bloomTexture
       vec3 bloomRGB = texture2D(bloomTexture, vUv).rgb;
-      vec3 centerSafe = clamp(center, 0.0, 1.0);
-      float luma = getLuma(centerSafe);
-      float glintThreshold = 0.85;
-      float glintStrength = 40.0;
+      float bloomLuma = getLuma(bloomRGB);
       vec2 sparkCell = floor(vUv * resolution);
       float noise = glintHash(sparkCell + floor(time * 12.0));
-      float sparkMask = step(0.93, noise);
-      float highlight = max(0.0, luma - glintThreshold);
-      highlight = pow(highlight, 2.0) * glintStrength * sparkMask;
-      vec3 finalGlints = centerSafe * highlight;
+      float sparkMask = step(0.999, noise);
+      float highlight = smoothstep(0.0, 0.1, pow(max(0.0, bloomLuma - 0.7), 2.0)) * 150.0 * sparkMask;
+      vec3 finalGlints = bloomRGB * highlight;
 
       // 3. Composite & ToneMapping
       vec3 color = baseRGB + bloomRGB + finalGlints;
@@ -170,29 +167,17 @@ function KeyLightSync() {
   );
 }
 
-// "Налобный фонарь" — SunLight привязан к камере для подсветки рельефа под углом взгляда
+// CHANGE 2: SunLightSync — static, no useFrame, position fixed
 function SunLightSync() {
-  const localRef = useRef<THREE.DirectionalLight>(null!);
-
-  useFrame(({ camera }) => {
-    if (localRef.current) {
-      localRef.current.position.set(
-        camera.position.x,
-        camera.position.y,
-        camera.position.z + 5,
-      );
-    }
-  });
-
   return (
     <directionalLight
       ref={(light) => {
-        localRef.current = light!;
-        sunLightRef.current = light; // wire module-level ref for bloom isolation
+        sunLightRef.current = light;
       }}
       name="SunLight"
-      intensity={Math.PI * 0.2}
-      color="#ffffff"
+      position={[-10, 20, -15]}
+      intensity={Math.PI * 0.4}
+      color="#ffe4b5"
     />
   );
 }
@@ -337,7 +322,7 @@ function SelectiveBloomEffect() {
       new THREE.Vector2(size.width / 2, size.height / 2),
       0.85, // intensity
       0.18, // radius
-      0.4,  // luminanceThreshold
+      0.4, // luminanceThreshold
     );
     if ("luminanceSmoothing" in bloomPass) {
       (bloomPass as any).luminanceSmoothing = 0.1;
@@ -352,14 +337,14 @@ function SelectiveBloomEffect() {
     const finalRenderPass = new RenderPass(scene, camera);
     finalComposer.addPass(finalRenderPass);
 
-    // V.507: Composite ShaderPass with Glints Engine v507 + time uniform
+    // CHANGE 4: exposure updated to 1.3
     const compositePass = new ShaderPass(
       new THREE.ShaderMaterial({
         uniforms: {
           baseTexture: { value: null },
           bloomTexture: { value: bloomComposer.renderTarget2.texture },
           resolution: { value: new THREE.Vector2() },
-          exposure: { value: 1.1 },
+          exposure: { value: 1.3 },
           time: { value: 0.0 },
         },
         vertexShader: COMPOSITE_SHADER.vertexShader,
@@ -403,7 +388,7 @@ function SelectiveBloomEffect() {
       mat.uniforms.time.value = state.clock.elapsedTime;
     }
 
-    // Fallback: if ref didn't wire — find by name in scene graph (guaranteed isolation)
+    // CHANGE 3: Save and restore light intensities (pKey/pSun pattern)
     const keyLight =
       keyLightRef.current ??
       (scene.getObjectByName("KeyLight") as THREE.DirectionalLight | null);
@@ -411,20 +396,20 @@ function SelectiveBloomEffect() {
       sunLightRef.current ??
       (scene.getObjectByName("SunLight") as THREE.DirectionalLight | null);
 
-    // Disable both lights during bloom pass
+    const pKey = keyLight?.intensity ?? 0;
+    const pSun = sunLight?.intensity ?? 0;
+
     if (keyLight) keyLight.intensity = 0;
     if (sunLight) sunLight.intensity = 0;
 
-    // Disable HDRI during bloom pass
     const savedEnv = scene.environment;
     scene.environment = null;
 
     camera.layers.set(1);
     bloomComposerRef.current.render();
 
-    // Restore everything for final render
-    if (keyLight) keyLight.intensity = Math.PI * 0.8;
-    if (sunLight) sunLight.intensity = Math.PI * 0.2; // matches SunLightSync base intensity
+    if (keyLight) keyLight.intensity = pKey;
+    if (sunLight) sunLight.intensity = pSun;
     scene.environment = savedEnv;
 
     camera.layers.enable(0);
@@ -495,7 +480,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           ...({ dithering: true } as any),
         }}
         onCreated={({ gl }) => {
-          // V.507 Step 1: Remove AgX, use NoToneMapping (ACES handled in shader)
+          // Step 1: Remove AgX, use NoToneMapping (ACES handled in shader)
           gl.toneMapping = THREE.NoToneMapping;
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.setClearAlpha(1);
