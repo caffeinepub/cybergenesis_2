@@ -178,6 +178,17 @@ export default function LandDashboard({
     }
   };
 
+  const handleApplyModifier = (instanceId: number) => {
+    const land = selectedLand;
+    if (!land) {
+      toast.error("Выберите участок");
+      return;
+    }
+    fakeCbr.markModifierApplied(instanceId, land.landId.toString());
+    setLocalModifiers(fakeCbr.getLocalModifiers());
+    toast.success("Модификатор установлен!");
+  };
+
   const handleUpgradePlot = async () => {
     if (!selectedLand) return;
     const cost = BigInt(1000);
@@ -484,35 +495,99 @@ export default function LandDashboard({
             </p>
           ) : (
             <div className="space-y-3">
-              {localModifiers.map((modifier: LocalModifier) => (
-                <div
-                  key={modifier.instanceId}
-                  className="glassmorphism rounded-lg p-4 border border-[#9933ff]/30 hover:border-[#9933ff]/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 flex-shrink-0 rounded-lg overflow-hidden bg-black/30 flex items-center justify-center">
+              {localModifiers.map((modifier: LocalModifier) => {
+                const rarityTier = modifier.rarityTier;
+                const rarityName =
+                  rarityTier === 4
+                    ? "Mythic"
+                    : rarityTier === 3
+                      ? "Legendary"
+                      : rarityTier === 2
+                        ? "Rare"
+                        : "Common";
+                const rarityColor =
+                  rarityTier === 4
+                    ? "text-yellow-400"
+                    : rarityTier === 3
+                      ? "text-purple-400"
+                      : rarityTier === 2
+                        ? "text-blue-400"
+                        : "text-gray-400";
+                const countOfThisType = localModifiers.filter(
+                  (m) => m.modifierType === modifier.modifierType,
+                ).length;
+                const isInstalled = !!modifier.appliedToLand;
+                return (
+                  <div
+                    key={modifier.instanceId}
+                    className="glassmorphism rounded-lg p-3 border border-[#9933ff]/30 hover:border-[#9933ff]/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
                       {modifier.assetUrl ? (
                         <img
                           src={modifier.assetUrl}
                           alt={modifier.displayName}
-                          className="w-9 h-9 object-contain"
+                          className="w-10 h-10 rounded-lg object-contain flex-shrink-0"
+                          style={{
+                            filter: `drop-shadow(0 0 6px ${
+                              rarityTier === 4
+                                ? "rgba(250,204,21,0.6)"
+                                : rarityTier === 3
+                                  ? "rgba(168,85,247,0.5)"
+                                  : rarityTier === 2
+                                    ? "rgba(96,165,250,0.4)"
+                                    : "rgba(156,163,175,0.3)"
+                            })`,
+                          }}
                         />
-                      ) : null}
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-[#9933ff]/20 border border-[#9933ff]/40 flex items-center justify-center flex-shrink-0">
+                          <TrendingUp className="w-5 h-5 text-[#9933ff]" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-white font-medium font-jetbrains text-sm truncate">
+                            {modifier.displayName}
+                          </p>
+                          {countOfThisType >= 2 && (
+                            <span className="text-[10px] font-jetbrains text-[#9933ff]/70 bg-[#9933ff]/10 px-1 rounded flex-shrink-0">
+                              x{countOfThisType}
+                            </span>
+                          )}
+                        </div>
+                        <p className={`text-xs font-jetbrains ${rarityColor}`}>
+                          {rarityName}
+                        </p>
+                        <p className="text-[#9933ff]/60 text-[10px] font-jetbrains">
+                          ID: {modifier.instanceId}
+                        </p>
+                      </div>
+                      {isInstalled ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            /* remove logic */
+                          }}
+                          className="px-2 py-2 rounded-lg bg-[#ff3344]/20 border border-[#ff3344]/50 text-[#ff3344] text-xs font-orbitron hover:bg-[#ff3344]/30 transition-all disabled:opacity-50 min-w-[60px]"
+                        >
+                          REMOVE
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleApplyModifier(modifier.instanceId)
+                          }
+                          className="px-2 py-2 rounded-lg bg-[#00ff41]/20 border border-[#00ff41]/50 text-[#00ff41] text-xs font-orbitron hover:bg-[#00ff41]/30 transition-all disabled:opacity-50 min-w-[60px]"
+                        >
+                          INSTALL
+                        </button>
+                      )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white font-medium font-jetbrains">
-                        {modifier.displayName}
-                      </p>
-                      <p className="text-white/50 text-sm font-jetbrains">
-                        Tier {modifier.rarityTier}
-                      </p>
-                    </div>
-                    <p className="text-[#9933ff] text-xs font-jetbrains flex-shrink-0">
-                      ID: {modifier.instanceId}
-                    </p>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

@@ -47,6 +47,12 @@ export default function Dashboard() {
     enabled: !!actor,
   });
 
+  // Define map state and handlers BEFORE early returns so they're available in all render paths
+  const isMapOpen = activeTab === "map";
+  const handleMapClose = () => {
+    setActiveTab("land");
+  };
+
   useEffect(() => {
     if (lands && lands.length > 0 && selectedLandIndex >= lands.length) {
       setSelectedLandIndex(0);
@@ -68,6 +74,7 @@ export default function Dashboard() {
   if (isLoading) {
     return (
       <div className="dashboard-container flex flex-col min-h-screen bg-transparent">
+        {isMapOpen && <MapView onClose={handleMapClose} />}
         <div className="min-h-screen flex items-center justify-center relative z-10">
           <div className="glassmorphism p-8 rounded-lg neon-border box-glow-cyan animate-pulse-glow">
             <div className="text-[#00ffff] text-xl animate-pulse font-orbitron text-glow-cyan">
@@ -82,6 +89,7 @@ export default function Dashboard() {
   if (!lands || lands.length === 0) {
     return (
       <div className="dashboard-container flex flex-col min-h-screen bg-transparent">
+        {isMapOpen && <MapView onClose={handleMapClose} />}
         <div className="min-h-screen flex items-center justify-center relative z-10 p-4">
           <div className="glassmorphism p-10 rounded-lg neon-border box-glow-cyan animate-pulse-glow max-w-md w-full text-center space-y-6">
             <div className="text-6xl">🌌</div>
@@ -134,12 +142,6 @@ export default function Dashboard() {
     { id: "map" as TabType, icon: MapIcon, label: "Карта" },
   ];
 
-  const handleMapClose = () => {
-    setActiveTab("land");
-  };
-
-  const isMapOpen = activeTab === "map";
-
   return (
     <div className="dashboard-container flex flex-col min-h-screen bg-transparent">
       {isMapOpen && <MapView onClose={handleMapClose} />}
@@ -158,7 +160,7 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             <div
-              className="lg:col-span-2 rounded-lg overflow-hidden glassmorphism neon-border box-glow-cyan animate-pulse-glow"
+              className="lg:col-span-2 rounded-lg overflow-hidden glassmorphism neon-border box-glow-purple animate-pulse-glow-purple"
               style={{
                 minHeight: "65vh",
                 position: "relative",

@@ -354,7 +354,7 @@ export default function Discovery() {
     return `${hours}ч ${minutes}м`;
   };
 
-  const getLootItemColor = (entry: LootDropEntry) => {
+  const _getLootItemColor = (entry: LootDropEntry) => {
     if (entry.itemType === "booster") {
       if (entry.rarityTier >= 3)
         return "text-yellow-400 border-yellow-400/30 bg-yellow-400/5";
@@ -394,6 +394,13 @@ export default function Discovery() {
     return getModifierAssetUrl(
       entry.itemId || (entry as { modifierType?: string }).modifierType || "",
     );
+  };
+
+  const RARITY_COLORS: Record<number, string> = {
+    1: "text-gray-400",
+    2: "text-blue-400",
+    3: "text-purple-400",
+    4: "text-yellow-400",
   };
 
   const getLootTypeLabel = (entry: LootDropEntry) => {
@@ -563,46 +570,48 @@ export default function Discovery() {
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
               {lootLog.map((entry) => {
-                const colorClass = getLootItemColor(entry);
                 const assetUrl = getLootAssetUrl(entry);
                 const typeLabel = getLootTypeLabel(entry);
                 return (
                   <div
                     key={entry.id}
-                    className={`rounded-lg p-3 border ${colorClass} flex items-center justify-between`}
+                    className="glassmorphism rounded-lg p-3 border border-[#9933ff]/30 flex items-center gap-3"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 flex-shrink-0 rounded-lg overflow-hidden bg-black/30 flex items-center justify-center">
-                        {assetUrl ? (
-                          <img
-                            src={assetUrl}
-                            alt={entry.displayName || entry.itemId}
-                            className="w-9 h-9 object-contain"
-                          />
-                        ) : (
-                          <span className="text-xl">
-                            {entry.itemType === "crystal"
-                              ? "💎"
-                              : entry.itemType === "booster"
-                                ? "⚡"
-                                : "🔵"}
-                          </span>
-                        )}
+                    {assetUrl ? (
+                      <img
+                        src={assetUrl}
+                        alt={entry.displayName || entry.itemId}
+                        className="w-10 h-10 rounded-lg object-contain flex-shrink-0"
+                        style={{
+                          filter: `drop-shadow(0 0 6px ${
+                            entry.rarityTier === 4
+                              ? "rgba(250,204,21,0.6)"
+                              : entry.rarityTier === 3
+                                ? "rgba(168,85,247,0.5)"
+                                : entry.rarityTier === 2
+                                  ? "rgba(96,165,250,0.4)"
+                                  : "rgba(156,163,175,0.3)"
+                          })`,
+                        }}
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-[#9933ff]/20 border border-[#9933ff]/40 flex items-center justify-center flex-shrink-0">
+                        <Sparkles className="w-4 h-4 text-[#9933ff]" />
                       </div>
-                      <div>
-                        <p className="text-white font-medium font-jetbrains text-sm">
-                          {entry.displayName || entry.itemId}
-                        </p>
-                        <p className="text-white/50 text-xs font-jetbrains">
-                          {typeLabel}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-white/40 text-xs font-jetbrains">
-                        {new Date(entry.openedAt).toLocaleTimeString()}
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-medium font-jetbrains text-sm truncate">
+                        {entry.displayName || entry.itemId}
+                      </p>
+                      <p
+                        className={`text-xs font-jetbrains ${RARITY_COLORS[entry.rarityTier ?? 1] ?? "text-gray-400"}`}
+                      >
+                        {typeLabel}
                       </p>
                     </div>
+                    <p className="text-white/50 text-xs font-jetbrains flex-shrink-0">
+                      {new Date(entry.openedAt).toLocaleTimeString()}
+                    </p>
                   </div>
                 );
               })}

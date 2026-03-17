@@ -107,14 +107,17 @@ const COMPOSITE_SHADER = {
       float sharpLimiter = clamp(1.0 - pow(lumaC, 3.0), 0.0, 1.0);
       vec3 baseRGB = center + (edge * sharpness * sharpLimiter);
 
-      // 2. Glints Engine — AA-Safe, HDR Sparks from bloomTexture
+      // 2. Glints Engine — from baseTexture (center), 12px cells, HDR-safe
+      // center is raw HDR from baseTexture — metal specular IS there (lights are on during final render)
+      // 12px cells make each spark a visible point, not a sub-pixel
+      // step(0.93, noise) = 7% of cells = rare but visible sparkles
       vec3 bloomRGB = texture2D(bloomTexture, vUv).rgb;
-      float bloomLuma = getLuma(bloomRGB);
-      vec2 sparkCell = floor(vUv * resolution);
+      float luma = getLuma(center);
+      vec2 sparkCell = floor(vUv * resolution / 12.0);
       float noise = glintHash(sparkCell + floor(time * 12.0));
-      float sparkMask = step(0.999, noise);
-      float highlight = smoothstep(0.0, 0.1, pow(max(0.0, bloomLuma - 0.7), 2.0)) * 150.0 * sparkMask;
-      vec3 finalGlints = bloomRGB * highlight;
+      float sparkMask = step(0.93, noise);
+      float highlight = pow(max(0.0, luma - 0.72), 2.0) * 40.0 * sparkMask;
+      vec3 finalGlints = clamp(center, 0.0, 1.0) * highlight;
 
       // 3. Composite & ToneMapping
       vec3 color = baseRGB + bloomRGB + finalGlints;

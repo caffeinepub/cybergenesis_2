@@ -29,12 +29,18 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
     enabled: !!actor,
   });
 
-  // 1. Lock scroll + load Leaflet
+  // 1. Lock scroll + force black background + load Leaflet
   useEffect(() => {
+    // Force body background to black — prevents purple gradient from bleeding through
+    document.body.style.backgroundColor = "#000000";
     document.body.style.overflow = "hidden";
+
     if ((window as any).L) {
       setLeafletReady(true);
-      return;
+      return () => {
+        document.body.style.backgroundColor = "";
+        document.body.style.overflow = "unset";
+      };
     }
     const link = document.createElement("link");
     link.rel = "stylesheet";
@@ -46,6 +52,7 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
     script.onload = () => setLeafletReady(true);
     document.head.appendChild(script);
     return () => {
+      document.body.style.backgroundColor = "";
       document.body.style.overflow = "unset";
     };
   }, []);
@@ -60,7 +67,12 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
     )
       return;
     const L = (window as any).L;
-    const map = L.map(mapContainerRef.current, {
+    // Fix for React StrictMode double-mount: reset _leaflet_id before init
+    const container = mapContainerRef.current;
+    if ((container as any)._leaflet_id) {
+      (container as any)._leaflet_id = undefined;
+    }
+    const map = L.map(container, {
       crs: L.CRS.Simple,
       minZoom: -1,
       maxZoom: 3,
