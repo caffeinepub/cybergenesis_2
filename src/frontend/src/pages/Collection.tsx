@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sparkles, Star, X } from "lucide-react";
 import { useState } from "react";
@@ -6,6 +5,8 @@ import { createPortal } from "react-dom";
 import {
   PLANNED_MODIFIER_CATALOG,
   type PlannedModifier,
+  RARITY_COLORS,
+  RARITY_GLOW,
 } from "../data/modifierCatalog";
 
 export default function Collection() {
@@ -13,68 +14,6 @@ export default function Collection() {
     src: string;
     name: string;
   } | null>(null);
-
-  const _getTierName = (tier: number): string => {
-    switch (tier) {
-      case 1:
-        return "COMMON";
-      case 2:
-        return "RARE";
-      case 3:
-        return "LEGENDARY";
-      case 4:
-        return "MYTHIC";
-      default:
-        return "UNKNOWN";
-    }
-  };
-
-  const _getTierColor = (tier: number): string => {
-    switch (tier) {
-      case 1:
-        return "text-gray-400";
-      case 2:
-        return "text-blue-400";
-      case 3:
-        return "text-purple-400";
-      case 4:
-        return "text-yellow-400";
-      default:
-        return "text-primary";
-    }
-  };
-
-  const _getTierBorderClass = (tier: number): string => {
-    switch (tier) {
-      case 1:
-        return "border-gray-500/30 hover:border-gray-400/50";
-      case 2:
-        return "border-blue-500/30 hover:border-blue-400/50 box-glow-blue";
-      case 3:
-        return "border-purple-500/30 hover:border-purple-400/50 box-glow-purple";
-      case 4:
-        return "border-yellow-500/30 hover:border-yellow-400/50 box-glow-gold";
-      default:
-        return "border-primary/30";
-    }
-  };
-
-  const _getTierBadgeVariant = (
-    tier: number,
-  ): "default" | "secondary" | "outline" | "destructive" => {
-    switch (tier) {
-      case 1:
-        return "outline";
-      case 2:
-        return "secondary";
-      case 3:
-        return "default";
-      case 4:
-        return "destructive";
-      default:
-        return "outline";
-    }
-  };
 
   const tierCounts = PLANNED_MODIFIER_CATALOG.reduce(
     (acc, mod) => {
@@ -100,35 +39,71 @@ export default function Collection() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="glassmorphism p-4 rounded-lg border border-gray-500/20 text-center">
+            <div
+              className="glassmorphism p-4 rounded-lg text-center"
+              style={{ border: "1px solid rgba(156,163,175,0.25)" }}
+            >
               <p className="font-jetbrains text-xs text-muted-foreground uppercase mb-1">
                 Common
               </p>
-              <p className="font-orbitron text-2xl font-bold text-gray-400">
+              <p
+                className="font-orbitron text-2xl font-bold"
+                style={{
+                  color: "#9CA3AF",
+                  textShadow: "0 0 8px rgba(156,163,175,0.5)",
+                }}
+              >
                 {tierCounts[1] || 0}
               </p>
             </div>
-            <div className="glassmorphism p-4 rounded-lg border border-blue-500/20 text-center">
+            <div
+              className="glassmorphism p-4 rounded-lg text-center"
+              style={{ border: "1px solid rgba(96,165,250,0.25)" }}
+            >
               <p className="font-jetbrains text-xs text-muted-foreground uppercase mb-1">
                 Rare
               </p>
-              <p className="font-orbitron text-2xl font-bold text-blue-400">
+              <p
+                className="font-orbitron text-2xl font-bold"
+                style={{
+                  color: "#60A5FA",
+                  textShadow: "0 0 8px rgba(96,165,250,0.6)",
+                }}
+              >
                 {tierCounts[2] || 0}
               </p>
             </div>
-            <div className="glassmorphism p-4 rounded-lg border border-purple-500/20 text-center">
+            <div
+              className="glassmorphism p-4 rounded-lg text-center"
+              style={{ border: "1px solid rgba(168,85,247,0.25)" }}
+            >
               <p className="font-jetbrains text-xs text-muted-foreground uppercase mb-1">
                 Legendary
               </p>
-              <p className="font-orbitron text-2xl font-bold text-purple-400">
+              <p
+                className="font-orbitron text-2xl font-bold"
+                style={{
+                  color: "#A855F7",
+                  textShadow: "0 0 8px rgba(168,85,247,0.7)",
+                }}
+              >
                 {tierCounts[3] || 0}
               </p>
             </div>
-            <div className="glassmorphism p-4 rounded-lg border border-yellow-500/20 text-center">
+            <div
+              className="glassmorphism p-4 rounded-lg text-center"
+              style={{ border: "1px solid rgba(250,204,21,0.25)" }}
+            >
               <p className="font-jetbrains text-xs text-muted-foreground uppercase mb-1">
                 Mythic
               </p>
-              <p className="font-orbitron text-2xl font-bold text-yellow-400">
+              <p
+                className="font-orbitron text-2xl font-bold"
+                style={{
+                  color: "#FACC15",
+                  textShadow: "0 0 10px rgba(250,204,21,0.8)",
+                }}
+              >
                 {tierCounts[4] || 0}
               </p>
             </div>
@@ -203,6 +178,11 @@ interface ModifierCardProps {
 }
 
 function ModifierCard({ modifier, index, onImageClick }: ModifierCardProps) {
+  const [hovered, setHovered] = useState(false);
+
+  const color = RARITY_COLORS[modifier.rarity_tier] ?? "#9CA3AF";
+  const glow = RARITY_GLOW[modifier.rarity_tier] ?? "rgba(156,163,175,0.25)";
+
   const getTierName = (tier: number): string => {
     switch (tier) {
       case 1:
@@ -218,111 +198,129 @@ function ModifierCard({ modifier, index, onImageClick }: ModifierCardProps) {
     }
   };
 
-  const getTierColor = (tier: number): string => {
-    switch (tier) {
-      case 1:
-        return "text-gray-400";
-      case 2:
-        return "text-blue-400";
-      case 3:
-        return "text-purple-400";
-      case 4:
-        return "text-yellow-400";
-      default:
-        return "text-primary";
-    }
+  const cardStyle: React.CSSProperties = {
+    animationDelay: `${index * 20}ms`,
+    animationDuration: "400ms",
+    background: "rgba(0,0,0,0.55)",
+    backdropFilter: "blur(12px)",
+    border: `1px solid ${color}${hovered ? "90" : "40"}`,
+    borderRadius: "10px",
+    padding: "12px 8px 10px",
+    transition: "all 0.25s ease",
+    cursor: "pointer",
+    boxShadow: hovered
+      ? `0 0 18px ${glow}, inset 0 0 0 1px rgba(255,255,255,0.05)`
+      : `0 0 0px ${glow}, inset 0 0 0 1px rgba(255,255,255,0.03)`,
+    transform: hovered ? "translateY(-2px) scale(1.03)" : "none",
   };
 
-  const getTierBorderClass = (tier: number): string => {
-    switch (tier) {
-      case 1:
-        return "border-gray-500/30 hover:border-gray-400/50";
-      case 2:
-        return "border-blue-500/30 hover:border-blue-400/50";
-      case 3:
-        return "border-purple-500/30 hover:border-purple-400/50";
-      case 4:
-        return "border-yellow-500/30 hover:border-yellow-400/50";
-      default:
-        return "border-primary/30";
-    }
-  };
-
-  const getTierBadgeVariant = (
-    tier: number,
-  ): "default" | "secondary" | "outline" | "destructive" => {
-    switch (tier) {
-      case 1:
-        return "outline";
-      case 2:
-        return "secondary";
-      case 3:
-        return "default";
-      case 4:
-        return "destructive";
-      default:
-        return "outline";
-    }
-  };
-
-  const getGlowFilter = (tier: number): string => {
-    switch (tier) {
-      case 1:
-        return "drop-shadow(0 0 4px rgba(156, 163, 175, 0.3))";
-      case 2:
-        return "drop-shadow(0 0 8px rgba(96, 165, 250, 0.5))";
-      case 3:
-        return "drop-shadow(0 0 12px rgba(168, 85, 247, 0.6))";
-      case 4:
-        return "drop-shadow(0 0 16px rgba(250, 204, 21, 0.8))";
-      default:
-        return "drop-shadow(0 0 4px rgba(0, 243, 255, 0.3))";
-    }
+  const imgStyle: React.CSSProperties = {
+    filter: `drop-shadow(0 0 ${hovered ? "16px" : "8px"} ${glow})`,
+    transition: "filter 0.3s ease",
+    width: 64,
+    height: 64,
+    objectFit: "contain" as const,
   };
 
   return (
     <div
-      className={`glassmorphism p-3 rounded-lg border ${getTierBorderClass(modifier.rarity_tier)} transition-all duration-300 cursor-pointer group hover:scale-105 hover:-translate-y-1 animate-in fade-in slide-in-from-bottom`}
-      style={{
-        animationDelay: `${index * 20}ms`,
-        animationDuration: "400ms",
-      }}
+      className="animate-in fade-in slide-in-from-bottom"
+      style={cardStyle}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      <div className="flex flex-col items-center gap-2">
+      <div className="flex flex-col items-center gap-1">
+        {/* Image or placeholder */}
         <button
           type="button"
           className="p-0 border-0 bg-transparent cursor-zoom-in"
           onClick={(e) => {
             e.stopPropagation();
-            onImageClick(modifier.asset_url, modifier.name);
+            if (modifier.asset_url)
+              onImageClick(modifier.asset_url, modifier.name);
           }}
           aria-label={`Открыть изображение ${modifier.name}`}
         >
-          <img
-            src={modifier.asset_url}
-            alt={modifier.name}
-            className="w-16 h-16 object-contain transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
-            style={{
-              filter: getGlowFilter(modifier.rarity_tier),
-            }}
-          />
+          {modifier.asset_url ? (
+            <img
+              src={modifier.asset_url}
+              alt={modifier.name}
+              style={imgStyle}
+            />
+          ) : (
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                background: "rgba(255,255,255,0.03)",
+                border: `1px dashed ${color}40`,
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 20,
+                color: `${color}60`,
+              }}
+            >
+              ?
+            </div>
+          )}
         </button>
-        <Badge
-          variant={getTierBadgeVariant(modifier.rarity_tier)}
-          className="font-jetbrains text-[10px] px-2 py-0"
+
+        {/* Rarity divider line */}
+        <div
+          style={{
+            height: 1,
+            width: "80%",
+            margin: "6px auto 4px",
+            background: `linear-gradient(to right, transparent, ${color}60, transparent)`,
+          }}
+        />
+
+        {/* Rarity badge */}
+        <span
+          style={{
+            fontSize: 9,
+            fontFamily: "monospace",
+            color: color,
+            letterSpacing: "0.05em",
+            opacity: 0.9,
+          }}
         >
           {getTierName(modifier.rarity_tier)}
-        </Badge>
-        <div className="text-center w-full">
-          <p
-            className={`font-orbitron text-xs font-bold ${getTierColor(modifier.rarity_tier)} truncate`}
-          >
-            {modifier.name}
-          </p>
-          <p className="font-jetbrains text-[10px] text-muted-foreground">
-            ID: {modifier.id}
-          </p>
-        </div>
+        </span>
+
+        {/* Name */}
+        <p
+          style={{
+            fontFamily: "monospace",
+            fontSize: 10,
+            fontWeight: 600,
+            color: "rgba(255,255,255,0.85)",
+            textAlign: "center",
+            lineHeight: 1.3,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            maxWidth: "100%",
+            margin: 0,
+          }}
+        >
+          {modifier.name}
+        </p>
+
+        {/* ID */}
+        <p
+          style={{
+            fontSize: 9,
+            fontFamily: "monospace",
+            color: "rgba(255,255,255,0.2)",
+            textAlign: "center",
+            margin: 0,
+          }}
+        >
+          ID: {modifier.id}
+        </p>
       </div>
     </div>
   );

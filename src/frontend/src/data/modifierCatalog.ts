@@ -28,72 +28,350 @@ export interface Crystal {
   rarity: "rare" | "legendary" | "mythic";
 }
 
-// IMG_0354.webp = cyber rabbit (odd IDs: 1,3,5,...)
-// IMG_0351.webp = astronaut  (even IDs: 2,4,6,...)
-const IMG_RABBIT = "/assets/uploads/IMG_0354-1.webp";
-const IMG_ASTRONAUT = "/assets/uploads/IMG_0351-2.webp";
-
-// Alternate images by ID: odd = rabbit, even = astronaut
-function img(id: number): string {
-  return id % 2 !== 0 ? IMG_RABBIT : IMG_ASTRONAUT;
-}
-
 export const PLANNED_MODIFIER_CATALOG: PlannedModifier[] = [
   // Tier 1 - Common (15 entries)
-  { id: 1, name: "Crystal Shard", rarity_tier: 1, asset_url: img(1) },
-  { id: 2, name: "Data Fragment", rarity_tier: 1, asset_url: img(2) },
-  { id: 3, name: "Nano Circuit", rarity_tier: 1, asset_url: img(3) },
-  { id: 4, name: "Pixel Core", rarity_tier: 1, asset_url: img(4) },
-  { id: 5, name: "Binary Chip", rarity_tier: 1, asset_url: img(5) },
-  { id: 6, name: "Cyber Dust", rarity_tier: 1, asset_url: img(6) },
-  { id: 7, name: "Neon Spark", rarity_tier: 1, asset_url: img(7) },
-  { id: 8, name: "Code Byte", rarity_tier: 1, asset_url: img(8) },
-  { id: 9, name: "Wire Mesh", rarity_tier: 1, asset_url: img(9) },
-  { id: 10, name: "Glitch Token", rarity_tier: 1, asset_url: img(10) },
-  { id: 11, name: "Static Charge", rarity_tier: 1, asset_url: img(11) },
-  { id: 12, name: "Pulse Node", rarity_tier: 1, asset_url: img(12) },
-  { id: 13, name: "Flux Capacitor", rarity_tier: 1, asset_url: img(13) },
-  { id: 14, name: "Bit Stream", rarity_tier: 1, asset_url: img(14) },
-  { id: 15, name: "Scan Matrix", rarity_tier: 1, asset_url: img(15) },
+  {
+    id: 1,
+    name: "RuBaRu",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_1.webp",
+  },
+  {
+    id: 2,
+    name: "Omnity",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_2.webp",
+  },
+  {
+    id: 3,
+    name: "Catalyze",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_3.webp",
+  },
+  {
+    id: 4,
+    name: "ELNAai",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_4.webp",
+  },
+  {
+    id: 5,
+    name: "BoB",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_5.webp",
+  },
+  {
+    id: 6,
+    name: "KinicAI",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_6.webp",
+  },
+  {
+    id: 7,
+    name: "CLOUD",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_7.webp",
+  },
+  {
+    id: 8,
+    name: "WaterNeuron",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_8.webp",
+  },
+  {
+    id: 9,
+    name: "ICLighthouse",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_9.webp",
+  },
+  {
+    id: 10,
+    name: "LiquidiumWTF",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_10.webp",
+  },
+  {
+    id: 11,
+    name: "DecideAI",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_11.webp",
+  },
+  {
+    id: 12,
+    name: "ICPHUBS",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_12.webp",
+  },
+  {
+    id: 13,
+    name: "TRAX",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_13.webp",
+  },
+  {
+    id: 14,
+    name: "zCloak",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_14.webp",
+  },
+  {
+    id: 15,
+    name: "GLDT",
+    rarity_tier: 1,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_15.webp",
+  },
 
   // Tier 2 - Rare (15 entries)
-  { id: 16, name: "Energy Orb", rarity_tier: 2, asset_url: img(16) },
-  { id: 17, name: "Plasma Core", rarity_tier: 2, asset_url: img(17) },
-  { id: 18, name: "Quantum Relay", rarity_tier: 2, asset_url: img(18) },
-  { id: 19, name: "Neural Link", rarity_tier: 2, asset_url: img(19) },
-  { id: 20, name: "Holo Prism", rarity_tier: 2, asset_url: img(20) },
-  { id: 21, name: "Cyber Matrix", rarity_tier: 2, asset_url: img(21) },
-  { id: 22, name: "Void Shard", rarity_tier: 2, asset_url: img(22) },
-  { id: 23, name: "Photon Beam", rarity_tier: 2, asset_url: img(23) },
-  { id: 24, name: "Laser Grid", rarity_tier: 2, asset_url: img(24) },
-  { id: 25, name: "Neon Pulse", rarity_tier: 2, asset_url: img(25) },
-  { id: 26, name: "Data Nexus", rarity_tier: 2, asset_url: img(26) },
-  { id: 27, name: "Sync Module", rarity_tier: 2, asset_url: img(27) },
-  { id: 28, name: "Echo Chamber", rarity_tier: 2, asset_url: img(28) },
-  { id: 29, name: "Phase Shifter", rarity_tier: 2, asset_url: img(29) },
-  { id: 30, name: "Warp Drive", rarity_tier: 2, asset_url: img(30) },
+  {
+    id: 16,
+    name: "Plug",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_16.webp",
+  },
+  {
+    id: 17,
+    name: "dscvrOne",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_17.webp",
+  },
+  {
+    id: 18,
+    name: "distrikt",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_18.webp",
+  },
+  {
+    id: 19,
+    name: "BoomDAO",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_19.webp",
+  },
+  {
+    id: 20,
+    name: "YRAL",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_20.webp",
+  },
+  {
+    id: 21,
+    name: "onicai",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_21.webp",
+  },
+  {
+    id: 22,
+    name: "IC_GHOST",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_22.webp",
+  },
+  {
+    id: 23,
+    name: "SNEED",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_23.webp",
+  },
+  {
+    id: 24,
+    name: "WUMBO",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_24.webp",
+  },
+  {
+    id: 25,
+    name: "Sonic",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_25.webp",
+  },
+  {
+    id: 26,
+    name: "ICPSwap",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_26.webp",
+  },
+  {
+    id: 27,
+    name: "COE",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_27.webp",
+  },
+  {
+    id: 28,
+    name: "Windoge98",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_28.webp",
+  },
+  {
+    id: 29,
+    name: "Yuku",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_29.webp",
+  },
+  {
+    id: 30,
+    name: "TabbyPOS",
+    rarity_tier: 2,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_30.webp",
+  },
 
   // Tier 3 - Legendary (12 entries)
-  { id: 31, name: "Quantum Portal", rarity_tier: 3, asset_url: img(31) },
-  { id: 32, name: "Singularity Core", rarity_tier: 3, asset_url: img(32) },
-  { id: 33, name: "Infinity Matrix", rarity_tier: 3, asset_url: img(33) },
-  { id: 34, name: "Cosmic Nexus", rarity_tier: 3, asset_url: img(34) },
-  { id: 35, name: "Void Engine", rarity_tier: 3, asset_url: img(35) },
-  { id: 36, name: "Hyper Reactor", rarity_tier: 3, asset_url: img(36) },
-  { id: 37, name: "Stellar Forge", rarity_tier: 3, asset_url: img(37) },
-  { id: 38, name: "Dimension Gate", rarity_tier: 3, asset_url: img(38) },
-  { id: 39, name: "Time Crystal", rarity_tier: 3, asset_url: img(39) },
-  { id: 40, name: "Omega Sphere", rarity_tier: 3, asset_url: img(40) },
-  { id: 41, name: "Genesis Cube", rarity_tier: 3, asset_url: img(41) },
-  { id: 42, name: "Apex Conduit", rarity_tier: 3, asset_url: img(42) },
+  {
+    id: 31,
+    name: "CLOWN",
+    rarity_tier: 3,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_31.webp",
+  },
+  {
+    id: 32,
+    name: "drifty",
+    rarity_tier: 3,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_32.webp",
+  },
+  {
+    id: 33,
+    name: "DOGMI",
+    rarity_tier: 3,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_33.webp",
+  },
+  {
+    id: 34,
+    name: "OpenChat",
+    rarity_tier: 3,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_34.webp",
+  },
+  {
+    id: 35,
+    name: "KongSwap",
+    rarity_tier: 3,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_35.webp",
+  },
+  {
+    id: 36,
+    name: "Odin_fun",
+    rarity_tier: 3,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_36.webp",
+  },
+  {
+    id: 37,
+    name: "TokoApp",
+    rarity_tier: 3,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_37.webp",
+  },
+  {
+    id: 38,
+    name: "DfinityDEV",
+    rarity_tier: 3,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_38.webp",
+  },
+  {
+    id: 39,
+    name: "Piggycell",
+    rarity_tier: 3,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_39.webp",
+  },
+  {
+    id: 40,
+    name: "Dragginz",
+    rarity_tier: 3,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_40.webp",
+  },
+  {
+    id: 41,
+    name: "TAGGR",
+    rarity_tier: 3,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_41.webp",
+  },
+  {
+    id: 42,
+    name: "ICPanda",
+    rarity_tier: 3,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_42.webp",
+  },
 
   // Tier 4 - Mythic (6 entries)
-  { id: 43, name: "Eternal Nexus", rarity_tier: 4, asset_url: img(43) },
-  { id: 44, name: "Primordial Core", rarity_tier: 4, asset_url: img(44) },
-  { id: 45, name: "Celestial Artifact", rarity_tier: 4, asset_url: img(45) },
-  { id: 46, name: "Divine Catalyst", rarity_tier: 4, asset_url: img(46) },
-  { id: 47, name: "Transcendent Relic", rarity_tier: 4, asset_url: img(47) },
-  { id: 48, name: "Omnipotent Shard", rarity_tier: 4, asset_url: img(48) },
+  {
+    id: 43,
+    name: "OISY",
+    rarity_tier: 4,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_43.webp",
+  },
+  {
+    id: 44,
+    name: "DMAIL",
+    rarity_tier: 4,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_44.webp",
+  },
+  {
+    id: 45,
+    name: "ICP",
+    rarity_tier: 4,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_45.webp",
+  },
+  {
+    id: 46,
+    name: "Motoko",
+    rarity_tier: 4,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_46.webp",
+  },
+  {
+    id: 47,
+    name: "caffeine",
+    rarity_tier: 4,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_47.webp",
+  },
+  {
+    id: 48,
+    name: "InternetComputer",
+    rarity_tier: 4,
+    asset_url:
+      "https://raw.githubusercontent.com/dobr312/cyberland/refs/heads/main/Mods/modifier_48.webp",
+  },
 ];
 
 // Booster catalog — 3 types, each gives energy immediately on use
@@ -155,3 +433,18 @@ export const CRYSTAL_CATALOG: Crystal[] = [
     rarity: "mythic",
   },
 ];
+
+// Rarity color helpers
+export const RARITY_COLORS: Record<number, string> = {
+  1: "#9CA3AF", // Common — серый
+  2: "#60A5FA", // Rare — синий
+  3: "#A855F7", // Legendary — фиолетовый
+  4: "#FACC15", // Mythic — золотой
+};
+
+export const RARITY_GLOW: Record<number, string> = {
+  1: "rgba(156,163,175,0.25)",
+  2: "rgba(96,165,250,0.45)",
+  3: "rgba(168,85,247,0.55)",
+  4: "rgba(250,204,21,0.7)",
+};

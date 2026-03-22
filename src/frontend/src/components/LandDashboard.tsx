@@ -65,7 +65,6 @@ export default function LandDashboard({
   };
 
   // Periodically refresh inventory to pick up new items from cache openings
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshInventory is stable, intentionally omitted
   useEffect(() => {
     const interval = setInterval(() => {
       setBoosterStacks(fakeCbr.getBoosters());

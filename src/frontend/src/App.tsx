@@ -1,4 +1,10 @@
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle,
+  Loader2,
+  Network,
+  RefreshCw,
+} from "lucide-react";
 import React, { useEffect, useState } from "react";
 import ConfigValidator from "./components/ConfigValidator";
 import CosmicBackground from "./components/CosmicBackground";
@@ -67,106 +73,97 @@ export default function App() {
 
   if (identityInitializing || (isAuthenticated && actorInitializing)) {
     return (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 9999,
-          backgroundImage: "url('/assets/uploads/IMG_0509-1.webp')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
-        }}
-      >
-        <style>{`
-          @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-          @keyframes spinReverse {
-            from { transform: translate(-50%, -50%) rotate(0deg); }
-            to { transform: translate(-50%, -50%) rotate(-360deg); }
-          }
-        `}</style>
+      <>
+        <CosmicBackground />
+        <ParticleBackground />
+        <ConfigValidator />
+        <div className="min-h-screen flex items-center justify-center relative z-10 p-4">
+          <div className="text-center space-y-6 p-8 glassmorphism rounded-lg neon-border box-glow-cyan max-w-3xl animate-pulse-glow">
+            <Loader2 className="w-16 h-16 animate-spin text-[#00ffff] mx-auto drop-shadow-[0_0_15px_rgba(0,255,255,0.8)]" />
+            <div className="space-y-3">
+              <h2 className="text-2xl font-bold text-[#00ffff] tracking-wider font-orbitron text-glow-cyan">
+                ИНИЦИАЛИЗАЦИЯ СИСТЕМЫ
+              </h2>
+              <p className="text-[#9933ff] text-sm tracking-wide font-jetbrains">
+                {identityInitializing
+                  ? "Загрузка аутентификации..."
+                  : "Подключение к блокчейну Internet Computer..."}
+              </p>
 
-        {/* Glassmorphism card at bottom */}
-        <div
-          style={{
-            position: "absolute",
-            bottom: "28%",
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(255,255,255,0.03)",
-            backdropFilter: "blur(10px)",
-            WebkitBackdropFilter: "blur(10px)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: "20px",
-            padding: "22px 60px",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {/* Double ring loader */}
-          <div
-            style={{
-              position: "relative",
-              width: "140px",
-              height: "140px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {/* Outer ring — magenta dashed, spinning */}
-            <div
-              style={{
-                width: "140px",
-                height: "140px",
-                borderRadius: "50%",
-                border: "12px dashed #E600E6",
-                filter: "drop-shadow(0 0 8px rgba(230,0,230,0.85))",
-                animation: "spin 3s linear infinite",
-                position: "absolute",
-                top: 0,
-                left: 0,
-              }}
-            />
-            {/* Inner ring — cyan solid, spinning reverse */}
-            <div
-              style={{
-                width: "104px",
-                height: "104px",
-                borderRadius: "50%",
-                border: "10px solid #00E6E6",
-                filter: "drop-shadow(0 0 8px rgba(0,230,230,0.85))",
-                animation: "spinReverse 1.5s linear infinite",
-                position: "absolute",
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%,-50%)",
-              }}
-            />
+              <div className="glassmorphism p-6 rounded neon-border mt-4">
+                <div className="flex items-center justify-center space-x-2 mb-4">
+                  <Network className="w-6 h-6 text-[#00ffff]" />
+                  <h3 className="text-[#00ffff] font-bold text-base font-orbitron text-glow-cyan">
+                    МАКСИМАЛЬНАЯ СТАБИЛЬНОСТЬ
+                  </h3>
+                </div>
+                <div className="space-y-2 text-xs font-mono text-left font-jetbrains">
+                  <div className="flex items-start space-x-2">
+                    <CheckCircle className="w-4 h-4 text-[#00ff41] mt-0.5 flex-shrink-0" />
+                    <p className="text-[#00ff41]/90">
+                      <span className="text-[#00ffff] font-bold">Таймаут:</span>{" "}
+                      120 секунд (максимально рекомендуемый)
+                    </p>
+                  </div>
+                  <div className="flex items-start space-x-2">
+                    <CheckCircle className="w-4 h-4 text-[#00ff41] mt-0.5 flex-shrink-0" />
+                    <p className="text-[#00ff41]/90">
+                      <span className="text-[#00ffff] font-bold">
+                        Попытки повтора:
+                      </span>{" "}
+                      25 попыток с экспоненциальной задержкой (1с → 45с)
+                    </p>
+                  </div>
+                  <div className="flex items-start space-x-2">
+                    <CheckCircle className="w-4 h-4 text-[#00ff41] mt-0.5 flex-shrink-0" />
+                    <p className="text-[#00ff41]/90">
+                      <span className="text-[#00ffff] font-bold">
+                        Основной шлюз:
+                      </span>{" "}
+                      https://ic0.app (официальный DFINITY)
+                    </p>
+                  </div>
+                  <div className="flex items-start space-x-2">
+                    <CheckCircle className="w-4 h-4 text-[#00ff41] mt-0.5 flex-shrink-0" />
+                    <p className="text-[#00ff41]/90">
+                      <span className="text-[#00ffff] font-bold">
+                        Резервные шлюзы:
+                      </span>{" "}
+                      boundary.ic0.app, icp-api.io (автоматическое переключение)
+                    </p>
+                  </div>
+                  <div className="flex items-start space-x-2">
+                    <CheckCircle className="w-4 h-4 text-[#00ff41] mt-0.5 flex-shrink-0" />
+                    <p className="text-[#00ff41]/90">
+                      <span className="text-[#00ffff] font-bold">
+                        Опрос данных:
+                      </span>{" "}
+                      25 попыток с 4 проверками работоспособности
+                    </p>
+                  </div>
+                  <div className="flex items-start space-x-2">
+                    <CheckCircle className="w-4 h-4 text-[#00ff41] mt-0.5 flex-shrink-0" />
+                    <p className="text-[#00ff41]/90">
+                      <span className="text-[#00ffff] font-bold">
+                        Синхронизация:
+                      </span>{" "}
+                      Полная синхронизация конфигурации фронтенда/бэкенда
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="glassmorphism p-4 rounded border border-[#9933ff]/30 mt-4">
+                <p className="text-[#9933ff]/90 text-xs leading-relaxed font-jetbrains">
+                  Установка стабильного соединения с автоматическим
+                  переключением шлюзов и комплексными проверками подключения ко
+                  всем пяти канистрам...
+                </p>
+              </div>
+            </div>
           </div>
-
-          {/* Loading text */}
-          <p
-            className="font-orbitron"
-            style={{
-              marginTop: "22px",
-              color: "#FFFFFF",
-              textShadow: "0 0 12px rgba(255,255,255,0.75)",
-              letterSpacing: "4px",
-              fontSize: "1.35rem",
-              textTransform: "uppercase",
-            }}
-          >
-            LOADING CYBERLAND METAVERSE
-          </p>
         </div>
-      </div>
+      </>
     );
   }
 
