@@ -11,6 +11,7 @@ import CosmicBackground from "./components/CosmicBackground";
 import ParticleBackground from "./components/ParticleBackground";
 import ProfileSetup from "./components/ProfileSetup";
 import ReinitializationProgress from "./components/ReinitializationProgress";
+import { Toaster } from "./components/ui/sonner";
 import { useActorReinitializer } from "./hooks/useActorReinitializer";
 import { useActorWithInit } from "./hooks/useActorWithInit";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
@@ -67,6 +68,7 @@ export default function App() {
           maxAttempts={3}
           currentGateway={reinitializer.currentGateway}
         />
+        <Toaster />
       </>
     );
   }
@@ -163,6 +165,7 @@ export default function App() {
             </div>
           </div>
         </div>
+        <Toaster />
       </>
     );
   }
@@ -295,6 +298,7 @@ export default function App() {
             </div>
           </div>
         </div>
+        <Toaster />
       </>
     );
   }
@@ -306,6 +310,7 @@ export default function App() {
         <ParticleBackground />
         <ConfigValidator />
         <LandingPage />
+        <Toaster />
       </>
     );
   }
@@ -317,6 +322,7 @@ export default function App() {
       <ConfigValidator />
       {showProfileSetup && <ProfileSetup />}
       {!showProfileSetup && <Dashboard />}
+      <Toaster />
     </>
   );
 }

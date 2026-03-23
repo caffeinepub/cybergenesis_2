@@ -293,8 +293,11 @@ function LandInspectorModal({
                 return (
                   <div
                     key={slot}
-                    className="aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5 glassmorphism border border-[#9933ff]/30 p-1 relative overflow-hidden"
-                    style={{ filter: RARITY_DROP_SHADOW[mod.rarity_tier] }}
+                    className="rounded-lg flex flex-col items-center justify-center gap-0.5 glassmorphism border border-[#9933ff]/30 p-1 relative"
+                    style={{
+                      minHeight: "54px",
+                      filter: RARITY_DROP_SHADOW[mod.rarity_tier],
+                    }}
                     title={`Слот #${slot}: ${mod.name}`}
                   >
                     <div
@@ -476,7 +479,7 @@ function LandCard({
         <button
           type="button"
           className="relative rounded-xl overflow-hidden cursor-pointer w-full"
-          style={{ height: "160px" }}
+          style={{ height: "200px" }}
           onClick={() => onInspect(land)}
         >
           <div
@@ -487,9 +490,10 @@ function LandCard({
             }}
           />
           <img
-            src="/assets/uploads/IMG_0577-1-1.webp"
+            src="/assets/uploads/IMG_0732-1.webp"
             alt={biomeName}
-            className="w-full h-full object-cover rounded-xl relative z-10 opacity-90"
+            className="w-full h-full object-contain rounded-xl relative z-10 opacity-90"
+            style={{ background: "transparent" }}
           />
           <div className="absolute inset-0 z-20 flex items-center justify-center">
             <span className="font-orbitron text-[10px] text-white/60 bg-black/40 px-2 py-1 rounded-full backdrop-blur-sm border border-white/10 uppercase tracking-widest">
@@ -816,7 +820,7 @@ function CreateListingDialog({
                   >
                     <div className="flex items-center gap-3">
                       <img
-                        src="/assets/uploads/IMG_0577-1-1.webp"
+                        src="/assets/uploads/IMG_0732-1.webp"
                         alt={land.plotName}
                         className="w-10 h-10 rounded-lg object-cover flex-shrink-0 opacity-80"
                       />

@@ -4,290 +4,661 @@ import { useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useGetLandData } from "../hooks/useQueries";
 
 const MAP_SIZE = 2560;
-const VORTEX_CENTER: [number, number] = [1280, 1280];
-const RAW_MAP_URL =
-  "https://raw.githubusercontent.com/dobr312/cyberland/main/CyberMap/IMG_0133.webp";
+const RAW_MAP_URL = "/assets/uploads/IMG_0133-4-2.webp";
 
-// Max CSS z-index values for absolute priority
-const Z_MAP = 2147483640;
-const Z_BUTTON = 2147483647;
+const BIOME_COLORS: Record<string, string> = {
+  MYTHIC_VOID: "#cc00ff",
+  MYTHIC_AETHER: "#0088ff",
+  VOLCANIC_CRAG: "#ff2200",
+  DESERT_DUNE: "#ffaa00",
+  FOREST_VALLEY: "#00ff44",
+  SNOW_PEAK: "#88ddff",
+  ISLAND_ARCHIPELAGO: "#00ffcc",
+};
+
+const BIOME_REGIONS: Record<
+  string,
+  { x: [number, number]; y: [number, number] }
+> = {
+  MYTHIC_VOID: { x: [1150, 1410], y: [1150, 1410] },
+  MYTHIC_AETHER: { x: [1150, 1410], y: [1150, 1410] },
+  VOLCANIC_CRAG: { x: [1800, 2300], y: [500, 1000] },
+  DESERT_DUNE: { x: [1700, 2350], y: [1700, 2300] },
+  FOREST_VALLEY: { x: [400, 900], y: [1200, 1700] },
+  SNOW_PEAK: { x: [300, 1000], y: [400, 800] },
+  ISLAND_ARCHIPELAGO: { x: [300, 1100], y: [1900, 2400] },
+};
+
+function getPointInBiome(landId: number, biome: string): [number, number] {
+  const seed = landId * 1337.42;
+  const r = (offset: number) => Math.abs(Math.sin(seed + offset));
+  const zone = BIOME_REGIONS[biome] ?? BIOME_REGIONS.MYTHIC_VOID;
+  return [
+    zone.y[0] + r(1) * (zone.y[1] - zone.y[0]),
+    zone.x[0] + r(2) * (zone.x[1] - zone.x[0]),
+  ];
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const r = Number.parseInt(hex.slice(1, 3), 16);
+  const g = Number.parseInt(hex.slice(3, 5), 16);
+  const b = Number.parseInt(hex.slice(5, 7), 16);
+  return [r, g, b];
+}
+
+function makeBeamIcon(L: any, color: string, isOwner: boolean) {
+  const h = isOwner ? 140 : 90;
+  const coreW = isOwner ? 2 : 1;
+  const glowW = isOwner ? 14 : 5;
+  const blurPx = isOwner ? 2 : 0;
+
+  const effectiveColor = isOwner ? color : "#FAD26A";
+  const [r, g, b] = hexToRgb(effectiveColor);
+
+  const coreShadow = isOwner
+    ? `0 0 3px 1px rgba(${r},${g},${b},1), 0 0 6px 2px rgba(${r},${g},${b},0.6)`
+    : "none";
+
+  const html = `
+    <div style="position:relative;width:${glowW}px;height:${h}px;cursor:pointer;pointer-events:auto;">
+      ${
+        isOwner
+          ? `<div style="
+        position:absolute;
+        left:50%;
+        transform:translateX(-50%);
+        width:${glowW}px;
+        height:${h}px;
+        background:linear-gradient(to bottom,rgba(${r},${g},${b},0.5) 0%,rgba(${r},${g},${b},0.2) 55%,transparent 100%);
+        border-radius:${glowW / 2}px ${glowW / 2}px 2px 2px;
+        filter:blur(${blurPx}px);
+        pointer-events:none;
+      "></div>`
+          : ""
+      }
+      <div style="
+        position:absolute;
+        left:50%;
+        transform:translateX(-50%);
+        width:${coreW}px;
+        height:${h}px;
+        background:linear-gradient(to bottom,rgba(${r},${g},${b},0.5) 0%,rgba(${r},${g},${b},0.9) 100%);
+        border-radius:${coreW / 2}px;
+        box-shadow:${coreShadow};
+        pointer-events:none;
+      "></div>
+    </div>`;
+
+  return L.divIcon({
+    html,
+    className: "",
+    iconSize: [glowW, h],
+    iconAnchor: [glowW / 2, h],
+  });
+}
 
 const MapView = ({ onClose }: { onClose: () => void }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
-  const hasAnimatedRef = useRef(false);
-  const [leafletReady, setLeafletReady] = useState(false);
+  const beamLayerRef = useRef<any>(null);
+  const hasZoomedRef = useRef(false);
+  const [isEngineReady, setIsEngineReady] = useState(false);
+  const [isMapReady, setIsMapReady] = useState(false);
+  const [isImageLoaded, setIsImageLoaded] = useState(false);
+  const [isZoomReady, setIsZoomReady] = useState(false);
+  const [popup, setPopup] = useState<{
+    landId: number;
+    biome: string;
+    principal: string;
+    modCount: number;
+    latlng: any;
+    isOwner: boolean;
+  } | null>(null);
+  const [popupPx, setPopupPx] = useState<{ x: number; y: number } | null>(null);
+
   const { actor } = useActor();
   const { identity } = useInternetIdentity();
-  const principalId = identity?.getPrincipal().toString();
+  const principalId = identity?.getPrincipal().toString() ?? null;
 
-  const { data: lands } = useQuery({
-    queryKey: ["landData"],
-    queryFn: () => actor?.getLandData(),
+  const { data: myLands } = useGetLandData();
+
+  const { data: allLandsPublic } = useQuery({
+    queryKey: ["allLandsPublic"],
+    queryFn: () => (actor as any)?.getAllLandsPublic(),
     enabled: !!actor,
   });
 
-  // 1. Lock scroll + force black background + load Leaflet
   useEffect(() => {
-    // Force body background to black — prevents purple gradient from bleeding through
-    document.body.style.backgroundColor = "#000000";
-    document.body.style.overflow = "hidden";
-
-    if ((window as any).L) {
-      setLeafletReady(true);
-      return () => {
-        document.body.style.backgroundColor = "";
-        document.body.style.overflow = "unset";
-      };
-    }
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    document.head.appendChild(link);
-    const script = document.createElement("script");
-    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    script.async = true;
-    script.onload = () => setLeafletReady(true);
-    document.head.appendChild(script);
+    const map = mapRef.current;
+    if (!map || !popup) return;
+    const recalc = () => {
+      const pt = map.latLngToContainerPoint(popup.latlng);
+      setPopupPx({ x: pt.x, y: pt.y });
+    };
+    recalc();
+    map.on("move", recalc);
+    map.on("zoom", recalc);
     return () => {
-      document.body.style.backgroundColor = "";
+      map.off("move", recalc);
+      map.off("zoom", recalc);
+    };
+  }, [popup]);
+
+  // Failsafe: mark zoom ready after 6s
+  useEffect(() => {
+    const t = setTimeout(() => setIsZoomReady(true), 6000);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    if ((window as any).L) {
+      setIsEngineReady(true);
+    } else {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(link);
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.async = true;
+      script.onload = () => setIsEngineReady(true);
+      document.head.appendChild(script);
+    }
+    return () => {
       document.body.style.overflow = "unset";
     };
   }, []);
 
-  // 2. Initialize map
   useEffect(() => {
-    if (
-      !leafletReady ||
-      !mapContainerRef.current ||
-      mapRef.current ||
-      !(window as any).L
-    )
-      return;
+    if (!isEngineReady || !mapContainerRef.current || mapRef.current) return;
     const L = (window as any).L;
-    // Fix for React StrictMode double-mount: reset _leaflet_id before init
-    const container = mapContainerRef.current;
-    if ((container as any)._leaflet_id) {
-      (container as any)._leaflet_id = undefined;
-    }
-    const map = L.map(container, {
+    const map = L.map(mapContainerRef.current, {
       crs: L.CRS.Simple,
-      minZoom: -1,
-      maxZoom: 3,
+      minZoom: -2,
+      maxZoom: 1.0,
       zoomControl: false,
       attributionControl: false,
       maxBoundsViscosity: 1.0,
+      inertia: true,
+      inertiaDeceleration: 300,
+      inertiaMaxSpeed: 800,
+      easeLinearity: 0.2,
+      zoomAnimation: true,
+      zoomAnimationThreshold: 4,
+      wheelPxPerZoomLevel: 60,
+      scrollWheelZoom: false,
+      fadeAnimation: false,
     });
-    const bounds: [number, number][] = [
+    const bounds: [[number, number], [number, number]] = [
       [0, 0],
       [MAP_SIZE, MAP_SIZE],
     ];
-    L.imageOverlay(RAW_MAP_URL, bounds).addTo(map);
+    const overlay = L.imageOverlay(RAW_MAP_URL, bounds);
+    overlay.on("load", () => setIsImageLoaded(true));
+    overlay.on("error", () => setIsImageLoaded(true));
+    overlay.addTo(map);
     map.setMaxBounds(bounds);
-    const scale = Math.max(
-      window.innerWidth / MAP_SIZE,
-      window.innerHeight / MAP_SIZE,
-    );
-    map.setMinZoom(Math.log2(scale));
-    map.fitBounds(bounds);
+    map.setView([MAP_SIZE / 2, MAP_SIZE / 2], -1, { animate: false });
     mapRef.current = map;
-    // invalidateSize ensures Leaflet fills the container correctly
-    setTimeout(() => {
-      mapRef.current?.invalidateSize();
-    }, 150);
-    return () => {
-      mapRef.current?.remove();
-      mapRef.current = null;
-    };
-  }, [leafletReady]);
+    beamLayerRef.current = L.layerGroup().addTo(map);
 
-  // 3. Draw beams when data ready
-  // biome-ignore lint/correctness/useExhaustiveDependencies: leafletReady triggers beam draw after map init
+    const updateMinZoom = () => {
+      const scale = Math.max(
+        window.innerWidth / MAP_SIZE,
+        window.innerHeight / MAP_SIZE,
+      );
+      map.setMinZoom(Math.log2(scale));
+    };
+    updateMinZoom();
+    window.addEventListener("resize", updateMinZoom);
+
+    const perfStyle = document.createElement("style");
+    perfStyle.textContent = `
+      .leaflet-pane { will-change: transform; }
+      .leaflet-zoom-animated { will-change: transform; }
+    `;
+    document.head.appendChild(perfStyle);
+
+    let zoomTarget = map.getZoom();
+    let wheelTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.35 : -0.35;
+      zoomTarget = Math.max(
+        map.getMinZoom(),
+        Math.min(map.getMaxZoom(), zoomTarget + delta),
+      );
+      if (wheelTimer) clearTimeout(wheelTimer);
+      wheelTimer = setTimeout(() => {
+        const containerPoint = L.point(e.clientX, e.clientY);
+        const latlng = map.containerPointToLatLng(containerPoint);
+        map.setZoomAround(latlng, zoomTarget, {
+          animate: true,
+          duration: 0.25,
+        });
+      }, 35);
+    };
+    mapContainerRef.current?.addEventListener("wheel", onWheel, {
+      passive: false,
+    });
+
+    // Close popup on map click (not on marker)
+    map.on("click", () => {
+      setPopup(null);
+      setPopupPx(null);
+    });
+
+    setIsMapReady(true);
+    return () => {
+      window.removeEventListener("resize", updateMinZoom);
+      mapContainerRef.current?.removeEventListener("wheel", onWheel);
+      if (wheelTimer) clearTimeout(wheelTimer);
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+        beamLayerRef.current = null;
+      }
+    };
+  }, [isEngineReady]);
+
+  const handleBeamClick = async (
+    e: any,
+    landId: number,
+    biome: string,
+    principal: string,
+    isOwner: boolean,
+  ) => {
+    e.originalEvent?.stopPropagation();
+    const map = mapRef.current;
+    if (!map) return;
+    const latlng = e.latlng;
+    let modCount = 0;
+    let resolvedPrincipal = principal;
+    let resolvedBiome = biome;
+    try {
+      const result = await (actor as any)?.getLandDataById(BigInt(landId));
+      if (result && result.length > 0) {
+        modCount = result[0].attachedModifications?.length ?? 0;
+        resolvedPrincipal = result[0].owner?.toString() ?? principal;
+        resolvedBiome = result[0].biome ?? biome;
+      }
+    } catch (_) {}
+    setPopup({
+      landId,
+      biome: resolvedBiome,
+      principal: resolvedPrincipal,
+      modCount,
+      latlng,
+      isOwner,
+    });
+  };
+
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !lands || !(window as any).L) return;
+    const beamLayer = beamLayerRef.current;
+    if (!isMapReady || !map || !beamLayer || !(window as any).L) return;
+    if (!myLands && !allLandsPublic) return;
     const L = (window as any).L;
-    let myFirst: [number, number] | null = null;
-    for (const land of lands as any[]) {
-      const coords = getPointInBiome(Number(land.id), land.biome);
-      const isOwner = land.owner === principalId;
-      if (isOwner && !myFirst) myFirst = coords as [number, number];
-      const color = isOwner ? getBiomeColor(land.biome) : "#333";
-      L.polyline([VORTEX_CENTER, coords], {
-        color,
-        weight: isOwner ? 2.5 : 0.6,
-        opacity: isOwner ? 1 : 0.25,
-        className: isOwner
-          ? `beam-neon beam-${String(land.biome).toLowerCase()}`
-          : "beam-other",
-      }).addTo(map);
-      if (isOwner) {
-        L.circleMarker(coords, {
-          radius: 2,
-          fillColor: color,
-          fillOpacity: 1,
-          color: "#fff",
-          weight: 1,
-          className: "land-impact-point",
-        }).addTo(map);
+    beamLayer.clearLayers();
+
+    const renderedLandIds = new Set<number>();
+    let myCoords: [number, number] | null = null;
+
+    // 1. All public lands
+    if (Array.isArray(allLandsPublic)) {
+      try {
+        for (const land of allLandsPublic as any[]) {
+          const id = Number(land.landId);
+          const coords = getPointInBiome(id, land.biome);
+          const isOwner =
+            principalId != null && land.principal?.toString() === principalId;
+          if (isOwner && !myCoords) myCoords = coords;
+          renderedLandIds.add(id);
+          const color = BIOME_COLORS[land.biome] ?? "#8800ff";
+          const marker = L.marker(coords, {
+            icon: makeBeamIcon(L, color, isOwner),
+          });
+          marker.on("click", (e: any) =>
+            handleBeamClick(
+              e,
+              id,
+              land.biome,
+              land.principal?.toString() ?? "",
+              isOwner,
+            ),
+          );
+          marker.addTo(beamLayer);
+        }
+      } catch (e) {
+        console.warn("[MapView] allLandsPublic beam render error:", e);
       }
     }
-    if (myFirst && !hasAnimatedRef.current) {
-      map.setView(myFirst, 1);
-      hasAnimatedRef.current = true;
+
+    // 2. Owner beam fallback from myLands
+    if (Array.isArray(myLands)) {
+      try {
+        for (const land of myLands as any[]) {
+          const id = Number(land.landId);
+          if (!renderedLandIds.has(id)) {
+            const coords = getPointInBiome(id, land.biome);
+            if (!myCoords) myCoords = coords;
+            const color = BIOME_COLORS[land.biome] ?? "#8800ff";
+            const marker = L.marker(coords, {
+              icon: makeBeamIcon(L, color, true),
+            });
+            marker.on("click", (e: any) =>
+              handleBeamClick(
+                e,
+                id,
+                land.biome,
+                land.principal?.toString() ?? "",
+                true,
+              ),
+            );
+            marker.addTo(beamLayer);
+          } else if (!myCoords) {
+            myCoords = getPointInBiome(id, land.biome);
+          }
+        }
+      } catch (e) {
+        console.warn("[MapView] myLands beam render error:", e);
+      }
     }
-  }, [lands, principalId, leafletReady]);
 
-  const getBiomeColor = (biome: string) => {
-    const colors: Record<string, string> = {
-      MYTHIC_VOID: "#9933FF",
-      MYTHIC_AETHER: "#0055FF",
-      VOLCANIC_CRAG: "#ff3300",
-      DESERT_DUNE: "#FFCC00",
-      FOREST_VALLEY: "#00ff41",
-      SNOW_PEAK: "#ffffff",
-      ISLAND_ARCHIPELAGO: "#00ffff",
-    };
-    return colors[biome] || "#555";
+    // 3. Zoom to owner's land once
+    if (myCoords && !hasZoomedRef.current) {
+      hasZoomedRef.current = true;
+      map.flyTo(myCoords, -0.3, {
+        animate: true,
+        duration: 1.8,
+        easeLinearity: 0.2,
+      });
+      setTimeout(() => setIsZoomReady(true), 700);
+    } else if (!myCoords) {
+      setIsZoomReady(true);
+    }
+    // biome-ignore lint/correctness/useExhaustiveDependencies: handleBeamClick stable via useCallback not needed here
+  }, [allLandsPublic, myLands, principalId, isMapReady, handleBeamClick]);
+
+  const showOverlay = !isEngineReady || !isImageLoaded || !isZoomReady;
+
+  const formatPrincipal = (p: string) => {
+    if (!p || p.length < 12) return p;
+    return `${p.slice(0, 8)}...${p.slice(-4)}`;
   };
 
-  const getPointInBiome = (landId: number, biome: string) => {
-    const seed = landId * 1337.42;
-    const rng = (offset: number) => Math.abs(Math.sin(seed + offset));
-    const regions: any = {
-      MYTHIC_VOID: { x: [1150, 1410], y: [1150, 1410] },
-      MYTHIC_AETHER: { x: [1150, 1410], y: [1150, 1410] },
-      VOLCANIC_CRAG: { x: [1800, 2300], y: [500, 1000] },
-      DESERT_DUNE: { x: [1700, 2350], y: [1700, 2300] },
-      FOREST_VALLEY: { x: [400, 900], y: [1200, 1700] },
-      SNOW_PEAK: { x: [300, 1000], y: [400, 800] },
-      ISLAND_ARCHIPELAGO: { x: [300, 1100], y: [1900, 2400] },
-    };
-    const z = regions[biome] || regions.MYTHIC_VOID;
-    return [
-      z.y[0] + rng(1) * (z.y[1] - z.y[0]),
-      z.x[0] + rng(2) * (z.x[1] - z.x[0]),
-    ];
-  };
-
-  // MAP PORTAL — full screen black container, completely isolated
-  const mapPortal = ReactDOM.createPortal(
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: Z_MAP,
-        backgroundColor: "#000000",
-        overflow: "hidden",
-        touchAction: "none",
-        isolation: "isolate",
-      }}
-    >
-      {/* Loader: visible only while Leaflet CDN hasn't loaded yet */}
-      {!leafletReady && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            backgroundColor: "#000000",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 10,
-          }}
-        >
-          <div style={{ textAlign: "center" }}>
-            <div
-              style={{
-                color: "#00ff41",
-                fontFamily: "monospace",
-                fontSize: "12px",
-                letterSpacing: "3px",
-              }}
-            >
-              SCANNING SECTORS...
-            </div>
-            <div
-              style={{
-                width: "120px",
-                height: "1px",
-                background: "#00ff41",
-                margin: "10px auto",
-                animation: "mapSlide 2s infinite",
-              }}
-            />
+  const content = (
+    <div style={containerStyle}>
+      {showOverlay && (
+        <div style={loadingOverlayStyle}>
+          <div className="cyber-loader">
+            <div className="loader-text">SCANNING SECTORS...</div>
+            <div className="loader-bar" />
           </div>
         </div>
       )}
-
-      {/* Leaflet mount target */}
       <div
         ref={mapContainerRef}
-        style={{ width: "100%", height: "100%", backgroundColor: "#000000" }}
+        style={{
+          width: "100%",
+          height: "100%",
+          background: "#000",
+          position: "relative",
+        }}
       />
 
+      {/* Popup card */}
+      {popup !== null &&
+        popupPx !== null &&
+        (() => {
+          const biomeColor = BIOME_COLORS[popup.biome] ?? "#8800ff";
+          const CARD_W = 220;
+          const CARD_H = 120;
+          const MARGIN = 8;
+          let cx = popupPx.x + 16;
+          let cy = popupPx.y - 60;
+          if (cx + CARD_W > window.innerWidth - MARGIN)
+            cx = popupPx.x - CARD_W - 16;
+          if (cx < MARGIN) cx = MARGIN;
+          if (cy < MARGIN) cy = popupPx.y + 16;
+          if (cy + CARD_H > window.innerHeight - MARGIN)
+            cy = window.innerHeight - CARD_H - MARGIN;
+          return (
+            <div
+              style={{
+                position: "absolute",
+                left: cx,
+                top: cy,
+                width: 220,
+                zIndex: 9999,
+                pointerEvents: "auto",
+                animation: "popupIn 0.15s ease-out forwards",
+              }}
+            >
+              {/* Biome color top strip */}
+              <div
+                style={{
+                  height: 2,
+                  width: "100%",
+                  background: biomeColor,
+                  borderRadius: "10px 10px 0 0",
+                  boxShadow: `0 0 8px ${biomeColor}`,
+                }}
+              />
+              {/* Card body */}
+              <div
+                style={{
+                  background: "rgba(0,0,0,0.75)",
+                  backdropFilter: "blur(16px)",
+                  WebkitBackdropFilter: "blur(16px)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderTop: "none",
+                  borderRadius: "0 0 10px 10px",
+                  padding: "12px 14px",
+                  boxShadow:
+                    "0 0 24px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.04)",
+                  position: "relative",
+                }}
+              >
+                {/* Close button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPopup(null);
+                    setPopupPx(null);
+                  }}
+                  style={{
+                    position: "absolute",
+                    top: 6,
+                    right: 8,
+                    fontSize: 11,
+                    color: "rgba(255,255,255,0.3)",
+                    cursor: "pointer",
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    lineHeight: 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = "rgba(255,255,255,0.7)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = "rgba(255,255,255,0.3)";
+                  }}
+                >
+                  ×
+                </button>
+
+                {/* Row 1: Biome + YOUR LAND tag */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 6,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: 2,
+                      color: biomeColor,
+                      textShadow: `0 0 8px ${biomeColor}`,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {popup.biome.replace(/_/g, " ")}
+                  </span>
+                  {popup.isOwner && (
+                    <span
+                      style={{
+                        fontSize: 8,
+                        color: biomeColor,
+                        border: `1px solid ${biomeColor}`,
+                        borderRadius: 3,
+                        padding: "1px 5px",
+                        letterSpacing: 1,
+                        opacity: 0.85,
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      YOUR LAND
+                    </span>
+                  )}
+                </div>
+
+                {/* Row 2: Land ID */}
+                <div
+                  style={{
+                    fontFamily: "monospace",
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.9)",
+                    letterSpacing: 1,
+                    marginBottom: 4,
+                  }}
+                >
+                  LAND #{popup.landId}
+                </div>
+
+                {/* Row 3: Principal */}
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "rgba(255,255,255,0.35)",
+                    fontFamily: "monospace",
+                    letterSpacing: 0.5,
+                    marginBottom: 8,
+                  }}
+                >
+                  {formatPrincipal(popup.principal)}
+                </div>
+
+                {/* Divider */}
+                <div
+                  style={{
+                    height: 1,
+                    background: "rgba(255,255,255,0.06)",
+                    marginBottom: 8,
+                  }}
+                />
+
+                {/* Row 4: Mod counter */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 9,
+                      color: "rgba(255,255,255,0.3)",
+                      letterSpacing: 1.5,
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    MODS INSTALLED
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: biomeColor,
+                      textShadow: `0 0 6px ${biomeColor}`,
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    {popup.modCount}/49
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+      <button type="button" onClick={onClose} style={closeButtonStyle}>
+        ✕ EXIT
+      </button>
       <style>{`
-        .leaflet-container { background: #000000 !important; cursor: crosshair; }
-        .beam-neon {
-          stroke-dasharray: 12, 6;
-          animation: beamFlow 0.8s linear infinite;
-          filter: drop-shadow(0 0 4px currentColor);
-        }
-        @keyframes beamFlow {
-          from { stroke-dashoffset: 36; }
-          to { stroke-dashoffset: 0; }
-        }
-        .land-impact-point { filter: drop-shadow(0 0 8px #fff); }
-        @keyframes mapSlide {
-          0% { transform: scaleX(0); }
-          50% { transform: scaleX(1); }
-          100% { transform: scaleX(0); }
+        .leaflet-container { background:#000 !important; cursor:crosshair; }
+        .leaflet-marker-icon,.leaflet-marker-shadow { background:none; border:none; }
+        .cyber-loader { text-align:center; }
+        .loader-text { color:#00ff41; font-family:monospace; font-size:12px; letter-spacing:3px; }
+        .loader-bar { width:120px; height:1px; background:#00ff41; margin:10px auto; animation:slide 2s infinite; }
+        @keyframes slide { 0%{transform:scaleX(0);} 50%{transform:scaleX(1);} 100%{transform:scaleX(0);} }
+        @keyframes popupIn {
+          from { opacity: 0; transform: scale(0.92) translateY(4px); }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
         }
       `}</style>
-    </div>,
-    document.body,
+    </div>
   );
 
-  // CLOSE BUTTON PORTAL — separate portal at absolute max z-index.
-  // Completely independent from map container — always visible no matter what.
-  const closeButtonPortal = ReactDOM.createPortal(
-    <button
-      type="button"
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        top: "15px",
-        right: "15px",
-        zIndex: Z_BUTTON,
-        padding: "6px 14px",
-        fontSize: "10px",
-        backgroundColor: "rgba(0,0,0,0.85)",
-        color: "#00ff41",
-        border: "1px solid #00ff41",
-        borderRadius: "3px",
-        cursor: "pointer",
-        fontFamily: "monospace",
-        letterSpacing: "1px",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-      }}
-    >
-      ✕ EXIT
-    </button>,
-    document.body,
-  );
+  return ReactDOM.createPortal(content, document.body);
+};
 
-  return (
-    <>
-      {mapPortal}
-      {closeButtonPortal}
-    </>
-  );
+const containerStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 2147483647,
+  background: "#000",
+  overflow: "hidden",
+  touchAction: "none",
+  isolation: "isolate",
+};
+const loadingOverlayStyle: React.CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  zIndex: 2147483640,
+  background: "#000",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+const closeButtonStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "15px",
+  right: "15px",
+  zIndex: 2147483646,
+  padding: "6px 14px",
+  fontSize: "10px",
+  background: "rgba(0,0,0,0.7)",
+  color: "#00ff41",
+  border: "1px solid #00ff41",
+  borderRadius: "3px",
+  cursor: "pointer",
+  fontFamily: "monospace",
+  letterSpacing: "1px",
+  backdropFilter: "blur(10px)",
 };
 
 export default MapView;

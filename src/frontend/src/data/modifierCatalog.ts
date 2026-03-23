@@ -443,8 +443,8 @@ export const RARITY_COLORS: Record<number, string> = {
 };
 
 export const RARITY_GLOW: Record<number, string> = {
-  1: "rgba(156,163,175,0.25)",
-  2: "rgba(96,165,250,0.45)",
+  1: "rgba(156,163,175,0.55)", // Common — усилено с 0.25
+  2: "rgba(96,165,250,0.72)", // Rare — усилено с 0.45
   3: "rgba(168,85,247,0.55)",
   4: "rgba(250,204,21,0.7)",
 };

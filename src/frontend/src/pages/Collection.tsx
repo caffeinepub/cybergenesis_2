@@ -198,19 +198,50 @@ function ModifierCard({ modifier, index, onImageClick }: ModifierCardProps) {
     }
   };
 
+  const getBorderColor = (tier: number, isHovered: boolean) => {
+    const alpha = isHovered ? 0.75 : 0.55;
+    switch (tier) {
+      case 1:
+        return `rgba(156,163,175,${alpha})`;
+      case 2:
+        return `rgba(96,165,250,${alpha})`;
+      case 3:
+        return `rgba(168,85,247,${alpha})`;
+      case 4:
+        return `rgba(250,204,21,${alpha})`;
+      default:
+        return `rgba(156,163,175,${alpha})`;
+    }
+  };
+
+  const getDividerColor = (tier: number) => {
+    switch (tier) {
+      case 1:
+        return "rgba(156,163,175,0.5)";
+      case 2:
+        return "rgba(96,165,250,0.6)";
+      case 3:
+        return "rgba(168,85,247,0.65)";
+      case 4:
+        return "rgba(250,204,21,0.7)";
+      default:
+        return "rgba(156,163,175,0.5)";
+    }
+  };
+
   const cardStyle: React.CSSProperties = {
     animationDelay: `${index * 20}ms`,
     animationDuration: "400ms",
     background: "rgba(0,0,0,0.55)",
     backdropFilter: "blur(12px)",
-    border: `1px solid ${color}${hovered ? "90" : "40"}`,
+    border: `1px solid ${getBorderColor(modifier.rarity_tier, hovered)}`,
     borderRadius: "10px",
     padding: "12px 8px 10px",
     transition: "all 0.25s ease",
     cursor: "pointer",
     boxShadow: hovered
       ? `0 0 18px ${glow}, inset 0 0 0 1px rgba(255,255,255,0.05)`
-      : `0 0 0px ${glow}, inset 0 0 0 1px rgba(255,255,255,0.03)`,
+      : `0 0 8px ${glow}, inset 0 0 0 1px rgba(255,255,255,0.03)`,
     transform: hovered ? "translateY(-2px) scale(1.03)" : "none",
   };
 
@@ -273,7 +304,7 @@ function ModifierCard({ modifier, index, onImageClick }: ModifierCardProps) {
             height: 1,
             width: "80%",
             margin: "6px auto 4px",
-            background: `linear-gradient(to right, transparent, ${color}60, transparent)`,
+            background: `linear-gradient(to right, transparent, ${getDividerColor(modifier.rarity_tier)}, transparent)`,
           }}
         />
 
