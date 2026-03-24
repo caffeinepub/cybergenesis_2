@@ -6,8 +6,7 @@ import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useGetLandData } from "../hooks/useQueries";
 
-const MAP_SIZE = 2560;
-const RAW_MAP_URL = "/assets/uploads/IMG_0133-4-2.webp";
+const MAP_SIZE = 6000;
 
 const BIOME_COLORS: Record<string, string> = {
   MYTHIC_VOID: "#cc00ff",
@@ -23,19 +22,27 @@ const BIOME_REGIONS: Record<
   string,
   { x: [number, number]; y: [number, number] }
 > = {
-  MYTHIC_VOID: { x: [1150, 1410], y: [1150, 1410] },
-  MYTHIC_AETHER: { x: [1150, 1410], y: [1150, 1410] },
-  VOLCANIC_CRAG: { x: [1800, 2300], y: [500, 1000] },
-  DESERT_DUNE: { x: [1700, 2350], y: [1700, 2300] },
-  FOREST_VALLEY: { x: [400, 900], y: [1200, 1700] },
-  SNOW_PEAK: { x: [300, 1000], y: [400, 800] },
-  ISLAND_ARCHIPELAGO: { x: [300, 1100], y: [1900, 2400] },
+  MYTHIC_VOID: { x: [2350, 3650], y: [2350, 3650] },
+  MYTHIC_AETHER: { x: [2350, 3650], y: [2350, 3650] },
+  SNOW_PEAK: { x: [650, 1950], y: [650, 1950] },
+  VOLCANIC_CRAG: { x: [3850, 5150], y: [650, 1950] },
+  FOREST_VALLEY: { x: [550, 1850], y: [3850, 5150] },
+  DESERT_DUNE: { x: [4050, 5350], y: [3850, 5150] },
+  ISLAND_ARCHIPELAGO: { x: [2050, 3750], y: [4550, 5850] },
 };
 
-function getPointInBiome(landId: number, biome: string): [number, number] {
+function getBiomeKey(biome: any): string {
+  if (typeof biome === "string") return biome;
+  if (typeof biome === "object" && biome !== null)
+    return Object.keys(biome)[0] ?? "MYTHIC_VOID";
+  return "MYTHIC_VOID";
+}
+
+function getPointInBiome(landId: number, biome: any): [number, number] {
   const seed = landId * 1337.42;
   const r = (offset: number) => Math.abs(Math.sin(seed + offset));
-  const zone = BIOME_REGIONS[biome] ?? BIOME_REGIONS.MYTHIC_VOID;
+  const key = getBiomeKey(biome);
+  const zone = BIOME_REGIONS[key] ?? BIOME_REGIONS.MYTHIC_VOID;
   return [
     zone.y[0] + r(1) * (zone.y[1] - zone.y[0]),
     zone.x[0] + r(2) * (zone.x[1] - zone.x[0]),
@@ -184,25 +191,89 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
       attributionControl: false,
       maxBoundsViscosity: 1.0,
       inertia: true,
-      inertiaDeceleration: 300,
+      inertiaDeceleration: 500,
       inertiaMaxSpeed: 800,
-      easeLinearity: 0.2,
+      easeLinearity: 0.15,
       zoomAnimation: true,
       zoomAnimationThreshold: 4,
       wheelPxPerZoomLevel: 60,
       scrollWheelZoom: false,
       fadeAnimation: false,
     });
+
     const bounds: [[number, number], [number, number]] = [
       [0, 0],
       [MAP_SIZE, MAP_SIZE],
     ];
-    const overlay = L.imageOverlay(RAW_MAP_URL, bounds);
-    overlay.on("load", () => setIsImageLoaded(true));
-    overlay.on("error", () => setIsImageLoaded(true));
-    overlay.addTo(map);
+
+    // Layer 1: background (cosmos) — no load event needed
+    L.imageOverlay(
+      "/assets/uploads/map_background.webp",
+      [
+        [0, 0],
+        [6000, 6000],
+      ],
+      { opacity: 1 },
+    ).addTo(map);
+
+    // Layers 2–6: region PNGs with transparency
+    const regionLayers = [
+      {
+        path: "/assets/uploads/map_mythic.webp",
+        bounds: [
+          [2300, 2300],
+          [3700, 3700],
+        ],
+      },
+      {
+        path: "/assets/uploads/map_snow_peak.webp",
+        bounds: [
+          [600, 600],
+          [2000, 2000],
+        ],
+      },
+      {
+        path: "/assets/uploads/map_volcanic_crag.webp",
+        bounds: [
+          [600, 3800],
+          [2000, 5200],
+        ],
+      },
+      {
+        path: "/assets/uploads/map_forest_valley.webp",
+        bounds: [
+          [3800, 500],
+          [5200, 1900],
+        ],
+      },
+      {
+        path: "/assets/uploads/map_desert_dune.webp",
+        bounds: [
+          [3800, 4000],
+          [5200, 5400],
+        ],
+      },
+      {
+        path: "/assets/uploads/map_island_archipelago.webp",
+        bounds: [
+          [4500, 2000],
+          [5900, 3800],
+        ],
+      },
+    ];
+
+    regionLayers.forEach((layer, idx) => {
+      const overlay = L.imageOverlay(layer.path, layer.bounds, { opacity: 1 });
+      if (idx === regionLayers.length - 1) {
+        overlay.on("load", () => setIsImageLoaded(true));
+        overlay.on("error", () => setIsImageLoaded(true));
+      }
+      overlay.addTo(map);
+    });
+
     map.setMaxBounds(bounds);
-    map.setView([MAP_SIZE / 2, MAP_SIZE / 2], -1, { animate: false });
+    // Change 3: start closer (was -1.3)
+    map.setView([3000, 3000], -0.7, { animate: false });
     mapRef.current = map;
     beamLayerRef.current = L.layerGroup().addTo(map);
 
@@ -226,22 +297,24 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
     let zoomTarget = map.getZoom();
     let wheelTimer: ReturnType<typeof setTimeout> | null = null;
 
+    // Change 2: smoother wheel zoom, especially near min zoom
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const delta = e.deltaY < 0 ? 0.35 : -0.35;
-      zoomTarget = Math.max(
-        map.getMinZoom(),
-        Math.min(map.getMaxZoom(), zoomTarget + delta),
-      );
+      const minZ = map.getMinZoom();
+      const maxZ = map.getMaxZoom();
+      const nearMin = zoomTarget - minZ < 0.4;
+      const rawDelta = e.deltaY < 0 ? 0.35 : -0.35;
+      const delta = nearMin && rawDelta < 0 ? rawDelta * 0.5 : rawDelta;
+      zoomTarget = Math.max(minZ, Math.min(maxZ, zoomTarget + delta));
       if (wheelTimer) clearTimeout(wheelTimer);
       wheelTimer = setTimeout(() => {
         const containerPoint = L.point(e.clientX, e.clientY);
         const latlng = map.containerPointToLatLng(containerPoint);
         map.setZoomAround(latlng, zoomTarget, {
           animate: true,
-          duration: 0.25,
+          duration: 0.4,
         });
-      }, 35);
+      }, 60);
     };
     mapContainerRef.current?.addEventListener("wheel", onWheel, {
       passive: false,
@@ -319,7 +392,8 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
             principalId != null && land.principal?.toString() === principalId;
           if (isOwner && !myCoords) myCoords = coords;
           renderedLandIds.add(id);
-          const color = BIOME_COLORS[land.biome] ?? "#8800ff";
+          // Change 1: use getBiomeKey to normalize biome from Motoko object/string
+          const color = BIOME_COLORS[getBiomeKey(land.biome)] ?? "#8800ff";
           const marker = L.marker(coords, {
             icon: makeBeamIcon(L, color, isOwner),
           });
@@ -327,7 +401,7 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
             handleBeamClick(
               e,
               id,
-              land.biome,
+              getBiomeKey(land.biome),
               land.principal?.toString() ?? "",
               isOwner,
             ),
@@ -347,7 +421,8 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
           if (!renderedLandIds.has(id)) {
             const coords = getPointInBiome(id, land.biome);
             if (!myCoords) myCoords = coords;
-            const color = BIOME_COLORS[land.biome] ?? "#8800ff";
+            // Change 1: use getBiomeKey to normalize biome
+            const color = BIOME_COLORS[getBiomeKey(land.biome)] ?? "#8800ff";
             const marker = L.marker(coords, {
               icon: makeBeamIcon(L, color, true),
             });
@@ -355,7 +430,7 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
               handleBeamClick(
                 e,
                 id,
-                land.biome,
+                getBiomeKey(land.biome),
                 land.principal?.toString() ?? "",
                 true,
               ),
@@ -373,7 +448,7 @@ const MapView = ({ onClose }: { onClose: () => void }) => {
     // 3. Zoom to owner's land once
     if (myCoords && !hasZoomedRef.current) {
       hasZoomedRef.current = true;
-      map.flyTo(myCoords, -0.3, {
+      map.flyTo(myCoords, -0.5, {
         animate: true,
         duration: 1.8,
         easeLinearity: 0.2,
