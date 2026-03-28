@@ -6,6 +6,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import AnchorBuilder from "./AnchorBuilder";
 import LandModel from "./LandModel";
 
 interface CubeVisualizationProps {
@@ -448,6 +449,8 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
   }, [biome]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [anchorMode, setAnchorMode] = useState(false);
+  const landGroupRef = useRef<THREE.Group>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const toggleFullscreen = async () => {
@@ -493,7 +496,12 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           <SceneSetup />
           <CameraLayerSetup />
           <BackgroundSphere />
-          {modelUrl && <LandModel modelUrl={modelUrl} biome={biome} />}
+          {modelUrl && (
+            <LandModel ref={landGroupRef} modelUrl={modelUrl} biome={biome} />
+          )}
+          {anchorMode && modelUrl && (
+            <AnchorBuilder landRef={landGroupRef} finalLandScale={1} />
+          )}
           <Environment
             files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/artist_workshop_1k.hdr"
             environmentIntensity={1.45}
@@ -511,6 +519,30 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
         </Suspense>
       </Canvas>
 
+      {/* Anchor mode toggle button */}
+      <button
+        type="button"
+        onClick={() => setAnchorMode((v) => !v)}
+        style={{
+          position: "absolute",
+          bottom: "48px",
+          right: "16px",
+          zIndex: 50,
+          padding: "6px 10px",
+          fontSize: "9px",
+          fontFamily: "monospace",
+          letterSpacing: "1px",
+          background: anchorMode ? "rgba(0,255,136,0.15)" : "rgba(0,0,0,0.5)",
+          color: anchorMode ? "#00ff88" : "rgba(255,255,255,0.4)",
+          border: `1px solid ${anchorMode ? "rgba(0,255,136,0.6)" : "rgba(255,255,255,0.1)"}`,
+          borderRadius: "6px",
+          cursor: "pointer",
+          backdropFilter: "blur(10px)",
+          transition: "all 0.2s ease",
+        }}
+      >
+        {anchorMode ? "2b21 ANCHOR ON" : "2b21 ANCHOR"}
+      </button>
       {/* Glassmorphism fullscreen toggle button */}
       <button
         type="button"

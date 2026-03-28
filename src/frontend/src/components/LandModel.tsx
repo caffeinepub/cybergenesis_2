@@ -1,5 +1,5 @@
 import { useFrame, useLoader, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { forwardRef, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
@@ -9,11 +9,14 @@ interface LandModelProps {
   biome?: string;
 }
 
-export default function LandModel({ modelUrl, biome }: LandModelProps) {
+const LandModel = forwardRef<THREE.Group, LandModelProps>(function LandModel(
+  { modelUrl, biome },
+  ref,
+) {
   const { gl, camera } = useThree();
   const fittedRef = useRef(false);
   const isInitialized = useRef(false);
-  const group = useRef<THREE.Group>(null);
+  const internalRef = useRef<THREE.Group>(null);
 
   // Initialize KTX2Loader with CDN-hosted basis transcoder
   const ktx2Loader = useMemo(() => {
@@ -190,9 +193,21 @@ export default function LandModel({ modelUrl, biome }: LandModelProps) {
     });
   });
 
+  // Merge external ref with internal ref
+  const setRef = (node: THREE.Group | null) => {
+    (internalRef as React.MutableRefObject<THREE.Group | null>).current = node;
+    if (typeof ref === "function") {
+      ref(node);
+    } else if (ref) {
+      (ref as React.MutableRefObject<THREE.Group | null>).current = node;
+    }
+  };
+
   return (
-    <group ref={group}>
+    <group ref={setRef}>
       <primitive object={gltf.scene} />
     </group>
   );
-}
+});
+
+export default LandModel;
