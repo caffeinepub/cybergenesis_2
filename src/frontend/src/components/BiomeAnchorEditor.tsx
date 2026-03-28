@@ -1,0 +1,231 @@
+import { OrbitControls, useGLTF } from "@react-three/drei";
+import { Canvas } from "@react-three/fiber";
+import { Suspense, useRef, useState } from "react";
+import ReactDOM from "react-dom";
+import type * as THREE from "three";
+import AnchorBuilder from "./AnchorBuilder";
+
+const BIOME_MODEL_MAP: Record<string, string> = {
+  FOREST_VALLEY:
+    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/FOREST_VALLEY_KTX2.glb",
+  ISLAND_ARCHIPELAGO:
+    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/ISLAND_ARCHIPELAGO.glb",
+  SNOW_PEAK:
+    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/SNOW_PEAK.glb",
+  DESERT_DUNE:
+    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/DESERT_DUNE.glb",
+  VOLCANIC_CRAG:
+    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/VOLCANIC_CRAG.glb",
+  MYTHIC_VOID:
+    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_VOID.glb",
+  MYTHIC_AETHER:
+    "https://raw.githubusercontent.com/dobr312/cyberland/main/public/models/MYTHIC_AETHER.glb",
+};
+
+const BIOME_LABELS: Record<string, string> = {
+  FOREST_VALLEY: "FOREST",
+  ISLAND_ARCHIPELAGO: "ISLAND",
+  SNOW_PEAK: "SNOW",
+  DESERT_DUNE: "DESERT",
+  VOLCANIC_CRAG: "VOLCANIC",
+  MYTHIC_VOID: "MYTHIC_VOID",
+  MYTHIC_AETHER: "MYTHIC_AETHER",
+};
+
+const BIOME_KEYS = Object.keys(BIOME_MODEL_MAP);
+
+function BiomeLandModel({
+  modelUrl,
+  landRef,
+  scale,
+}: {
+  modelUrl: string;
+  landRef: React.RefObject<THREE.Group | null>;
+  scale: number;
+}) {
+  const { scene } = useGLTF(modelUrl);
+  return (
+    <primitive ref={landRef} object={scene} scale={[scale, scale, scale]} />
+  );
+}
+
+function SceneContent({
+  biome,
+  landScale,
+  onScaleChange,
+}: {
+  biome: string;
+  landScale: number;
+  onScaleChange: (s: number) => void;
+}) {
+  const landRef = useRef<THREE.Group>(null);
+  const modelUrl = BIOME_MODEL_MAP[biome];
+
+  return (
+    <>
+      <ambientLight intensity={0.8} />
+      <directionalLight position={[5, 10, 5]} intensity={1.5} />
+      <OrbitControls makeDefault enableDamping dampingFactor={0.05} />
+      <Suspense fallback={null}>
+        {modelUrl && (
+          <BiomeLandModel
+            modelUrl={modelUrl}
+            landRef={landRef}
+            scale={landScale}
+          />
+        )}
+      </Suspense>
+      {modelUrl && (
+        <AnchorBuilder
+          landRef={landRef}
+          finalLandScale={landScale}
+          currentScale={landScale}
+          onScaleChange={onScaleChange}
+          biomeName={biome}
+        />
+      )}
+    </>
+  );
+}
+
+export default function BiomeAnchorEditor({
+  onClose,
+}: { onClose: () => void }) {
+  const [selectedBiome, setSelectedBiome] = useState("FOREST_VALLEY");
+  const [landScale, setLandScale] = useState(1);
+
+  const content = (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 2147483647,
+        background: "#000",
+        display: "flex",
+        flexDirection: "column",
+        isolation: "isolate",
+      }}
+    >
+      {/* Top bar */}
+      <div
+        style={{
+          height: 52,
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          padding: "0 16px",
+          gap: 12,
+          background: "rgba(0,0,0,0.85)",
+          backdropFilter: "blur(10px)",
+          borderBottom: "1px solid rgba(0,255,136,0.2)",
+          zIndex: 2,
+        }}
+      >
+        {/* Title */}
+        <span
+          style={{
+            fontFamily: "monospace",
+            fontSize: 12,
+            color: "#00ff88",
+            letterSpacing: 2,
+            whiteSpace: "nowrap",
+            opacity: 0.9,
+          }}
+        >
+          ⬡ BIOME ANCHOR EDITOR
+        </span>
+
+        {/* Biome selector */}
+        <div
+          style={{
+            display: "flex",
+            gap: 4,
+            flex: 1,
+            justifyContent: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          {BIOME_KEYS.map((biome) => {
+            const isActive = selectedBiome === biome;
+            return (
+              <button
+                key={biome}
+                type="button"
+                onClick={() => setSelectedBiome(biome)}
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: 9,
+                  letterSpacing: 1,
+                  padding: "4px 8px",
+                  background: isActive
+                    ? "rgba(0,255,136,0.15)"
+                    : "rgba(0,0,0,0.5)",
+                  border: `1px solid ${isActive ? "rgba(0,255,136,0.9)" : "rgba(0,255,136,0.2)"}`,
+                  borderRadius: 4,
+                  color: isActive ? "#00ff88" : "rgba(0,255,136,0.45)",
+                  cursor: "pointer",
+                  boxShadow: isActive ? "0 0 8px rgba(0,255,136,0.35)" : "none",
+                  transition: "all 0.15s ease",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {BIOME_LABELS[biome]}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Scale info */}
+        <span
+          style={{
+            fontFamily: "monospace",
+            fontSize: 9,
+            color: "rgba(0,255,136,0.5)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          SCALE {landScale}×
+        </span>
+
+        {/* Exit */}
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            fontFamily: "monospace",
+            fontSize: 10,
+            padding: "5px 14px",
+            background: "rgba(0,0,0,0.7)",
+            color: "#00ff88",
+            border: "1px solid rgba(0,255,136,0.5)",
+            borderRadius: 3,
+            cursor: "pointer",
+            letterSpacing: 1,
+            backdropFilter: "blur(8px)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          ✕ EXIT
+        </button>
+      </div>
+
+      {/* 3D Canvas */}
+      <div style={{ flex: 1, position: "relative" }}>
+        <Canvas
+          style={{ width: "100%", height: "100%" }}
+          camera={{ position: [0, 3, 5], fov: 50 }}
+          gl={{ antialias: true }}
+          key={selectedBiome}
+        >
+          <SceneContent
+            biome={selectedBiome}
+            landScale={landScale}
+            onScaleChange={setLandScale}
+          />
+        </Canvas>
+      </div>
+    </div>
+  );
+
+  return ReactDOM.createPortal(content, document.body);
+}

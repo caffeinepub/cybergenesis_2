@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import type { LandData } from "../backend";
+import BiomeAnchorEditor from "../components/BiomeAnchorEditor";
 import CubeVisualization from "../components/CubeVisualization";
 import Discovery from "../components/Discovery";
 import Governance from "../components/Governance";
@@ -49,6 +50,7 @@ export default function Dashboard() {
 
   // Define map state and handlers BEFORE early returns so they're available in all render paths
   const isMapOpen = activeTab === "map";
+  const [isAnchorEditorOpen, setIsAnchorEditorOpen] = useState(false);
   const handleMapClose = () => {
     setActiveTab("land");
   };
@@ -145,6 +147,9 @@ export default function Dashboard() {
   return (
     <div className="dashboard-container flex flex-col min-h-screen bg-transparent">
       {isMapOpen && <MapView onClose={handleMapClose} />}
+      {isAnchorEditorOpen && (
+        <BiomeAnchorEditor onClose={() => setIsAnchorEditorOpen(false)} />
+      )}
 
       <div className="dashboard min-h-screen text-white relative overflow-hidden">
         <div className="relative z-10 container mx-auto px-4 py-8">
@@ -196,6 +201,13 @@ export default function Dashboard() {
                   );
                 })}
               </nav>
+              <button
+                type="button"
+                onClick={() => setIsAnchorEditorOpen(true)}
+                className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg glassmorphism border border-[#00ff88]/40 text-[#00ff88] hover:border-[#00ff88]/90 hover:bg-[#00ff88]/5 transition-all duration-200 font-mono text-xs tracking-widest"
+              >
+                u2b21 ANCHOR EDITOR
+              </button>
             </div>
           </div>
 
