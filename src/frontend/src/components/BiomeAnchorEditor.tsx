@@ -49,24 +49,44 @@ function BiomeLandModel({
   );
 }
 
+/**
+ * SceneContent — lives INSIDE the Canvas.
+ * We keep ONE Canvas alive and swap content by keying inner elements.
+ * This prevents drei <Html> from crashing when Canvas remounts.
+ */
 function SceneContent({
   biome,
   landScale,
   onScaleChange,
+  setOrbitEnabled,
+  orbitEnabled,
 }: {
   biome: string;
   landScale: number;
   onScaleChange: (s: number) => void;
+  setOrbitEnabled: (v: boolean) => void;
+  orbitEnabled: boolean;
 }) {
   const landRef = useRef<THREE.Group>(null);
   const modelUrl = BIOME_MODEL_MAP[biome];
 
   return (
     <>
+      {/* Black scene background — prevents purple gradient bleed */}
+      <color attach="background" args={["#000000"]} />
       <ambientLight intensity={0.8} />
       <directionalLight position={[5, 10, 5]} intensity={1.5} />
-      <OrbitControls makeDefault enableDamping dampingFactor={0.05} />
-      <Suspense fallback={null}>
+
+      {/* OrbitControls controlled by AnchorBuilder drag state */}
+      <OrbitControls
+        makeDefault
+        enabled={orbitEnabled}
+        enableDamping
+        dampingFactor={0.05}
+      />
+
+      {/* Model — keyed so it reloads on biome change without Canvas remount */}
+      <Suspense fallback={null} key={biome}>
         {modelUrl && (
           <BiomeLandModel
             modelUrl={modelUrl}
@@ -75,13 +95,17 @@ function SceneContent({
           />
         )}
       </Suspense>
+
+      {/* AnchorBuilder — keyed per biome so state resets correctly */}
       {modelUrl && (
         <AnchorBuilder
+          key={biome}
           landRef={landRef}
           finalLandScale={landScale}
           currentScale={landScale}
           onScaleChange={onScaleChange}
           biomeName={biome}
+          setOrbitEnabled={setOrbitEnabled}
         />
       )}
     </>
@@ -93,6 +117,7 @@ export default function BiomeAnchorEditor({
 }: { onClose: () => void }) {
   const [selectedBiome, setSelectedBiome] = useState("FOREST_VALLEY");
   const [landScale, setLandScale] = useState(1);
+  const [orbitEnabled, setOrbitEnabled] = useState(true);
 
   const content = (
     <div
@@ -115,13 +140,12 @@ export default function BiomeAnchorEditor({
           alignItems: "center",
           padding: "0 16px",
           gap: 12,
-          background: "rgba(0,0,0,0.85)",
+          background: "rgba(0,0,0,0.9)",
           backdropFilter: "blur(10px)",
           borderBottom: "1px solid rgba(0,255,136,0.2)",
           zIndex: 2,
         }}
       >
-        {/* Title */}
         <span
           style={{
             fontFamily: "monospace",
@@ -160,7 +184,9 @@ export default function BiomeAnchorEditor({
                   background: isActive
                     ? "rgba(0,255,136,0.15)"
                     : "rgba(0,0,0,0.5)",
-                  border: `1px solid ${isActive ? "rgba(0,255,136,0.9)" : "rgba(0,255,136,0.2)"}`,
+                  border: `1px solid ${
+                    isActive ? "rgba(0,255,136,0.9)" : "rgba(0,255,136,0.2)"
+                  }`,
                   borderRadius: 4,
                   color: isActive ? "#00ff88" : "rgba(0,255,136,0.45)",
                   cursor: "pointer",
@@ -175,7 +201,6 @@ export default function BiomeAnchorEditor({
           })}
         </div>
 
-        {/* Scale info */}
         <span
           style={{
             fontFamily: "monospace",
@@ -187,7 +212,6 @@ export default function BiomeAnchorEditor({
           SCALE {landScale}×
         </span>
 
-        {/* Exit */}
         <button
           type="button"
           onClick={onClose}
@@ -209,18 +233,18 @@ export default function BiomeAnchorEditor({
         </button>
       </div>
 
-      {/* 3D Canvas */}
-      <div style={{ flex: 1, position: "relative" }}>
+      {/* 3D Canvas — NOT keyed on biome to prevent crash */}
+      <div style={{ flex: 1, position: "relative", background: "#000" }}>
         <Canvas
           style={{ width: "100%", height: "100%" }}
-          camera={{ position: [0, 3, 5], fov: 50 }}
           gl={{ antialias: true }}
-          key={selectedBiome}
         >
           <SceneContent
             biome={selectedBiome}
             landScale={landScale}
             onScaleChange={setLandScale}
+            setOrbitEnabled={setOrbitEnabled}
+            orbitEnabled={orbitEnabled}
           />
         </Canvas>
       </div>
