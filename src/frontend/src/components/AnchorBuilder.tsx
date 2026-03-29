@@ -61,20 +61,39 @@ function AnchorChassis({
   const c = selected ? "#ffff00" : color;
   return (
     <group>
-      {/* Pivot — neon pink sphere */}
+      {/* Ground ring — shows anchor base clearly */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+        <ringGeometry args={[0.08, 0.13, 32]} />
+        <meshBasicMaterial
+          color={selected ? "#ffff00" : "#ff0099"}
+          transparent
+          opacity={0.9}
+          side={2}
+        />
+      </mesh>
+      {/* Pivot — large bright neon pink/yellow sphere */}
       <mesh>
-        <sphereGeometry args={[0.05, 16, 16]} />
-        <meshBasicMaterial color="#ff0099" />
+        <sphereGeometry args={[0.1, 16, 16]} />
+        <meshBasicMaterial color={selected ? "#ffff00" : "#ff0099"} />
+      </mesh>
+      {/* Outer glow ring around sphere */}
+      <mesh>
+        <torusGeometry args={[0.14, 0.02, 8, 32]} />
+        <meshBasicMaterial
+          color={selected ? "#ffff00" : "#ff00cc"}
+          transparent
+          opacity={0.7}
+        />
       </mesh>
       {/* Height guide cylinder — bottom at y=0 */}
       <mesh position={[0, 0.9, 0]}>
-        <cylinderGeometry args={[0.045, 0.045, 1.8, 12]} />
-        <meshBasicMaterial color={c} transparent opacity={0.28} />
+        <cylinderGeometry args={[0.03, 0.03, 1.8, 12]} />
+        <meshBasicMaterial color={c} transparent opacity={0.35} />
       </mesh>
-      {/* Directional nose — blue cone pointing +Z */}
-      <mesh position={[0, 0.14, 0.18]} rotation={[Math.PI / 2, 0, 0]}>
-        <coneGeometry args={[0.04, 0.14, 8]} />
-        <meshBasicMaterial color="#0099ff" />
+      {/* Directional nose — blue cone pointing +Z, shows forward direction */}
+      <mesh position={[0, 0.14, 0.22]} rotation={[Math.PI / 2, 0, 0]}>
+        <coneGeometry args={[0.06, 0.18, 8]} />
+        <meshBasicMaterial color="#00aaff" />
       </mesh>
     </group>
   );
@@ -100,6 +119,7 @@ export default function AnchorBuilder({
     "perspective",
   );
   const [hovered, setHovered] = useState<string | null>(null);
+  const [isHudOpen, setIsHudOpen] = useState(true);
 
   const groupRefs = useRef<Map<string, THREE.Group>>(new Map());
 
@@ -328,10 +348,10 @@ export default function AnchorBuilder({
           space="local"
           showX={gizmoMode !== "rotate"}
           showZ={gizmoMode !== "rotate"}
-          onMouseDown={() => setOrbitEnabled?.(false)}
-          onMouseUp={() => {
-            setOrbitEnabled?.(true);
-            syncTransform();
+          // @ts-ignore
+          onDraggingChanged={(e: any) => {
+            setOrbitEnabled?.(!e.value);
+            if (!e.value) syncTransform();
           }}
           onChange={() => {
             if (gizmoMode === "rotate") {
@@ -346,315 +366,81 @@ export default function AnchorBuilder({
       )}
 
       {/* ─── Glassmorphism HUD Sidebar ─── */}
-      <Html fullscreen>
-        <div
-          style={{
-            position: "absolute",
-            right: 16,
-            top: 16,
-            bottom: 16,
-            width: 262,
-            background: "rgba(0,0,0,0.80)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-            border: "1px solid rgba(0,243,255,0.22)",
-            borderRadius: 10,
-            display: "flex",
-            flexDirection: "column",
-            fontFamily: "monospace",
-            color: "#00f3ff",
-            overflow: "hidden",
-            pointerEvents: "auto",
-            userSelect: "none",
-          }}
-        >
-          {/* Header */}
+      <Html fullscreen style={{ pointerEvents: "none" }}>
+        {isHudOpen ? (
           <div
             style={{
-              padding: "12px 14px 10px",
-              borderBottom: "1px solid rgba(0,243,255,0.14)",
-              flexShrink: 0,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 10,
-                letterSpacing: 2,
-                fontWeight: "bold",
-                marginBottom: 2,
-                textShadow: "0 0 8px rgba(0,243,255,0.6)",
-              }}
-            >
-              CYBERLAND ANCHOR GEN v2.0
-            </div>
-            <div style={{ fontSize: 9, color: "rgba(0,243,255,0.45)" }}>
-              {biomeName} · {totalUsed} / 49
-            </div>
-          </div>
-
-          {/* Tier Selector */}
-          <div
-            style={{
-              padding: "9px 14px",
-              borderBottom: "1px solid rgba(0,243,255,0.1)",
-              flexShrink: 0,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 8,
-                letterSpacing: 2,
-                color: "rgba(0,243,255,0.35)",
-                marginBottom: 6,
-              }}
-            >
-              TIER
-            </div>
-            <div style={{ display: "flex", gap: 3 }}>
-              {TIERS.map((t) => {
-                const used = anchors.filter((a) => a.tier === t.prefix).length;
-                const isActive = activeTier === t.prefix;
-                const isFull = used >= t.max;
-                return (
-                  <button
-                    key={t.prefix}
-                    type="button"
-                    onClick={() => setActiveTier(t.prefix as TierPrefix)}
-                    style={{
-                      flex: 1,
-                      fontFamily: "monospace",
-                      fontSize: 8,
-                      padding: "4px 2px",
-                      background: isActive ? `${t.color}20` : "transparent",
-                      border: `1px solid ${
-                        isActive ? t.color : `${t.color}40`
-                      }`,
-                      borderRadius: 4,
-                      color: isFull
-                        ? `${t.color}40`
-                        : isActive
-                          ? t.color
-                          : `${t.color}80`,
-                      cursor: isFull ? "not-allowed" : "pointer",
-                      boxShadow: isActive ? `0 0 6px ${t.color}55` : "none",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: 1,
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    <span style={{ fontSize: 9, fontWeight: "bold" }}>
-                      {t.prefix.toUpperCase()}
-                    </span>
-                    <span style={{ fontSize: 7 }}>
-                      {used}/{t.max}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Global Actions */}
-          <div
-            style={{
-              padding: "9px 14px",
-              borderBottom: "1px solid rgba(0,243,255,0.1)",
-              flexShrink: 0,
+              position: "absolute",
+              right: 16,
+              top: 16,
+              bottom: 16,
+              width: 262,
+              background: "rgba(0,0,0,0.80)",
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+              border: "1px solid rgba(0,243,255,0.22)",
+              borderRadius: 10,
               display: "flex",
               flexDirection: "column",
-              gap: 5,
+              fontFamily: "monospace",
+              color: "#00f3ff",
+              overflow: "hidden",
+              pointerEvents: "auto",
+              userSelect: "none",
             }}
           >
-            <button
-              type="button"
-              onClick={addAnchor}
-              onMouseEnter={() => setHovered("add")}
-              onMouseLeave={() => setHovered(null)}
-              style={btn("add")}
-            >
-              + ADD NEW
-            </button>
-            <div style={{ display: "flex", gap: 4 }}>
-              <button
-                type="button"
-                onClick={() =>
-                  setGizmoMode(
-                    gizmoMode === "translate" ? "rotate" : "translate",
-                  )
-                }
-                onMouseEnter={() => setHovered("gizmo")}
-                onMouseLeave={() => setHovered(null)}
-                style={{
-                  ...btn("gizmo"),
-                  flex: 1,
-                  textAlign: "center" as const,
-                }}
-              >
-                {gizmoMode === "translate" ? "⇄ MOVE" : "↻ ROTATE"}
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setCameraMode(
-                    cameraMode === "perspective" ? "ortho" : "perspective",
-                  )
-                }
-                onMouseEnter={() => setHovered("cam")}
-                onMouseLeave={() => setHovered(null)}
-                style={{
-                  ...btn("cam"),
-                  flex: 1,
-                  textAlign: "center" as const,
-                }}
-              >
-                {cameraMode === "perspective" ? "📷 PERSP" : "📐 ORTHO"}
-              </button>
-            </div>
-            <div style={{ display: "flex", gap: 4 }}>
-              <button
-                type="button"
-                onClick={exportJson}
-                disabled={anchors.length === 0}
-                onMouseEnter={() => setHovered("export")}
-                onMouseLeave={() => setHovered(null)}
-                style={{
-                  ...btn("export"),
-                  flex: 1,
-                  textAlign: "center" as const,
-                  opacity: anchors.length === 0 ? 0.35 : 1,
-                }}
-              >
-                ↓ EXPORT JSON
-              </button>
-              <button
-                type="button"
-                onClick={clearAll}
-                disabled={anchors.length === 0}
-                onMouseEnter={() => setHovered("clear")}
-                onMouseLeave={() => setHovered(null)}
-                style={{
-                  ...btn("clear", true),
-                  flex: 1,
-                  textAlign: "center" as const,
-                  opacity: anchors.length === 0 ? 0.35 : 1,
-                }}
-              >
-                ✕ CLEAR ALL
-              </button>
-            </div>
-          </div>
-
-          {/* Selected Anchor Panel */}
-          {selectedAnchor && (
+            {/* Header */}
             <div
               style={{
-                padding: "9px 14px",
-                borderBottom: "1px solid rgba(0,243,255,0.1)",
+                padding: "12px 14px 10px",
+                borderBottom: "1px solid rgba(0,243,255,0.14)",
                 flexShrink: 0,
-                background: "rgba(255,255,0,0.03)",
               }}
             >
-              <div
-                style={{
-                  fontSize: 9,
-                  color: "#ffff00",
-                  letterSpacing: 1.5,
-                  marginBottom: 6,
-                  textShadow: "0 0 6px rgba(255,255,0,0.5)",
-                }}
-              >
-                SELECTED: {selectedAnchor.name}
-              </div>
-              <div
-                style={{
-                  fontSize: 8,
-                  color: "rgba(255,255,255,0.35)",
-                  marginBottom: 6,
-                }}
-              >
-                X: {selectedAnchor.position[0].toFixed(3)} &nbsp; Z:
-                {selectedAnchor.position[2].toFixed(3)}
-              </div>
-              {/* Y manual input */}
               <div
                 style={{
                   display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  marginBottom: 6,
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
                 }}
               >
-                <span
-                  style={{
-                    fontSize: 8,
-                    color: "rgba(0,243,255,0.45)",
-                    letterSpacing: 1,
-                    flexShrink: 0,
-                  }}
-                >
-                  Y =
-                </span>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={selectedAnchor.position[1]}
-                  onChange={(e) =>
-                    updateY(
-                      selectedAnchor.name,
-                      Number.parseFloat(e.target.value) || 0,
-                    )
-                  }
-                  style={{
-                    flex: 1,
-                    background: "rgba(0,0,0,0.5)",
-                    border: "1px solid rgba(0,243,255,0.3)",
-                    borderRadius: 3,
-                    color: "#00f3ff",
-                    fontFamily: "monospace",
-                    fontSize: 10,
-                    padding: "3px 6px",
-                    outline: "none",
-                  }}
-                />
-              </div>
-              {/* Yaw rotation buttons */}
-              <div style={{ display: "flex", gap: 4 }}>
+                <div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      letterSpacing: 2,
+                      fontWeight: "bold",
+                      marginBottom: 2,
+                      textShadow: "0 0 8px rgba(0,243,255,0.6)",
+                    }}
+                  >
+                    CYBERLAND ANCHOR GEN v2.0
+                  </div>
+                  <div style={{ fontSize: 9, color: "rgba(0,243,255,0.45)" }}>
+                    {biomeName} · {totalUsed} / 49
+                  </div>
+                </div>
                 <button
                   type="button"
-                  onClick={() => rotateYaw(-1)}
-                  onMouseEnter={() => setHovered("rl")}
-                  onMouseLeave={() => setHovered(null)}
+                  onClick={() => setIsHudOpen(false)}
                   style={{
-                    ...btn("rl"),
-                    flex: 1,
-                    textAlign: "center" as const,
-                    fontSize: 11,
+                    background: "none",
+                    border: "none",
+                    color: "rgba(0,243,255,0.5)",
+                    cursor: "pointer",
+                    fontSize: 14,
+                    padding: "0 2px",
+                    lineHeight: 1,
+                    marginTop: 2,
                   }}
+                  title="Collapse panel"
                 >
-                  ← YAW
-                </button>
-                <button
-                  type="button"
-                  onClick={() => rotateYaw(1)}
-                  onMouseEnter={() => setHovered("rr")}
-                  onMouseLeave={() => setHovered(null)}
-                  style={{
-                    ...btn("rr"),
-                    flex: 1,
-                    textAlign: "center" as const,
-                    fontSize: 11,
-                  }}
-                >
-                  YAW →
+                  ⇥
                 </button>
               </div>
             </div>
-          )}
 
-          {/* Scale panel */}
-          {onScaleChange && (
+            {/* Tier Selector */}
             <div
               style={{
                 padding: "9px 14px",
@@ -670,175 +456,475 @@ export default function AnchorBuilder({
                   marginBottom: 6,
                 }}
               >
-                LAND SCALE
+                TIER
               </div>
-              <div style={{ display: "flex", gap: 4 }}>
-                {[1, 12].map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => onScaleChange(s)}
-                    style={{
-                      flex: 1,
-                      fontFamily: "monospace",
-                      fontSize: 9,
-                      padding: "4px",
-                      background:
-                        currentScale === s
-                          ? "rgba(0,243,255,0.12)"
-                          : "transparent",
-                      border: `1px solid ${
-                        currentScale === s
-                          ? "rgba(0,243,255,0.8)"
-                          : "rgba(0,243,255,0.22)"
-                      }`,
-                      borderRadius: 4,
-                      color:
-                        currentScale === s ? "#00f3ff" : "rgba(0,243,255,0.35)",
-                      cursor: "pointer",
-                      boxShadow:
-                        currentScale === s
-                          ? "0 0 6px rgba(0,243,255,0.28)"
-                          : "none",
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    {s}×
-                  </button>
-                ))}
+              <div style={{ display: "flex", gap: 3 }}>
+                {TIERS.map((t) => {
+                  const used = anchors.filter(
+                    (a) => a.tier === t.prefix,
+                  ).length;
+                  const isActive = activeTier === t.prefix;
+                  const isFull = used >= t.max;
+                  return (
+                    <button
+                      key={t.prefix}
+                      type="button"
+                      onClick={() => setActiveTier(t.prefix as TierPrefix)}
+                      style={{
+                        flex: 1,
+                        fontFamily: "monospace",
+                        fontSize: 8,
+                        padding: "4px 2px",
+                        background: isActive ? `${t.color}20` : "transparent",
+                        border: `1px solid ${
+                          isActive ? t.color : `${t.color}40`
+                        }`,
+                        borderRadius: 4,
+                        color: isFull
+                          ? `${t.color}40`
+                          : isActive
+                            ? t.color
+                            : `${t.color}80`,
+                        cursor: isFull ? "not-allowed" : "pointer",
+                        boxShadow: isActive ? `0 0 6px ${t.color}55` : "none",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 1,
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      <span style={{ fontSize: 9, fontWeight: "bold" }}>
+                        {t.prefix.toUpperCase()}
+                      </span>
+                      <span style={{ fontSize: 7 }}>
+                        {used}/{t.max}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          )}
 
-          {/* Anchor List */}
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              padding: "8px 14px",
-              scrollbarWidth: "thin",
-            }}
-          >
+            {/* Global Actions */}
             <div
               style={{
-                fontSize: 8,
-                letterSpacing: 2,
-                color: "rgba(0,243,255,0.35)",
-                marginBottom: 6,
+                padding: "9px 14px",
+                borderBottom: "1px solid rgba(0,243,255,0.1)",
+                flexShrink: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: 5,
               }}
             >
-              ANCHORS ({totalUsed}/49)
+              <button
+                type="button"
+                onClick={addAnchor}
+                onMouseEnter={() => setHovered("add")}
+                onMouseLeave={() => setHovered(null)}
+                style={btn("add")}
+              >
+                + ADD NEW
+              </button>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setGizmoMode(
+                      gizmoMode === "translate" ? "rotate" : "translate",
+                    )
+                  }
+                  onMouseEnter={() => setHovered("gizmo")}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    ...btn("gizmo"),
+                    flex: 1,
+                    textAlign: "center" as const,
+                  }}
+                >
+                  {gizmoMode === "translate" ? "⇄ MOVE" : "↻ ROTATE"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCameraMode(
+                      cameraMode === "perspective" ? "ortho" : "perspective",
+                    )
+                  }
+                  onMouseEnter={() => setHovered("cam")}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    ...btn("cam"),
+                    flex: 1,
+                    textAlign: "center" as const,
+                  }}
+                >
+                  {cameraMode === "perspective" ? "📷 PERSP" : "📐 ORTHO"}
+                </button>
+              </div>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button
+                  type="button"
+                  onClick={exportJson}
+                  disabled={anchors.length === 0}
+                  onMouseEnter={() => setHovered("export")}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    ...btn("export"),
+                    flex: 1,
+                    textAlign: "center" as const,
+                    opacity: anchors.length === 0 ? 0.35 : 1,
+                  }}
+                >
+                  ↓ EXPORT JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  disabled={anchors.length === 0}
+                  onMouseEnter={() => setHovered("clear")}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    ...btn("clear", true),
+                    flex: 1,
+                    textAlign: "center" as const,
+                    opacity: anchors.length === 0 ? 0.35 : 1,
+                  }}
+                >
+                  ✕ CLEAR ALL
+                </button>
+              </div>
             </div>
-            {anchors.length === 0 && (
+
+            {/* Selected Anchor Panel */}
+            {selectedAnchor && (
               <div
                 style={{
-                  fontSize: 9,
-                  color: "rgba(255,255,255,0.2)",
-                  textAlign: "center",
-                  marginTop: 20,
-                  lineHeight: 1.8,
+                  padding: "9px 14px",
+                  borderBottom: "1px solid rgba(0,243,255,0.1)",
+                  flexShrink: 0,
+                  background: "rgba(255,255,0,0.03)",
                 }}
               >
-                No anchors placed.
-                <br />
-                Press ADD NEW to start.
-              </div>
-            )}
-            {anchors.map((anchor) => {
-              const tc = tierColor(anchor.tier);
-              const isSel = anchor.name === selectedName;
-              return (
-                <button
-                  key={anchor.name}
-                  type="button"
-                  onClick={() => setSelectedName(isSel ? null : anchor.name)}
+                <div
+                  style={{
+                    fontSize: 9,
+                    color: "#ffff00",
+                    letterSpacing: 1.5,
+                    marginBottom: 6,
+                    textShadow: "0 0 6px rgba(255,255,0,0.5)",
+                  }}
+                >
+                  SELECTED: {selectedAnchor.name}
+                </div>
+                <div
+                  style={{
+                    fontSize: 8,
+                    color: "rgba(255,255,255,0.35)",
+                    marginBottom: 6,
+                  }}
+                >
+                  X: {selectedAnchor.position[0].toFixed(3)} &nbsp; Z:
+                  {selectedAnchor.position[2].toFixed(3)}
+                </div>
+                {/* Y manual input */}
+                <div
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 4,
-                    padding: "4px 6px",
-                    marginBottom: 3,
-                    borderRadius: 4,
-                    background: isSel
-                      ? "rgba(255,255,0,0.06)"
-                      : "rgba(255,255,255,0.018)",
-                    border: `1px solid ${
-                      isSel ? "rgba(255,255,0,0.25)" : "rgba(255,255,255,0.05)"
-                    }`,
-                    cursor: "pointer",
+                    gap: 6,
+                    marginBottom: 6,
                   }}
                 >
-                  <div
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: 1,
-                      background: tc,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span
-                    style={{
-                      flex: 1,
-                      fontSize: 9,
-                      color: isSel ? "#ffff00" : tc,
-                    }}
-                  >
-                    {anchor.name}
-                  </span>
                   <span
                     style={{
                       fontSize: 8,
-                      color: "rgba(255,255,255,0.22)",
-                      marginRight: 2,
-                    }}
-                  >
-                    {anchor.position[0].toFixed(1)},
-                    {anchor.position[1].toFixed(1)},
-                    {anchor.position[2].toFixed(1)}
-                  </span>
-                  {/* Focus */}
-                  <button
-                    type="button"
-                    title="Focus"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedName(anchor.name);
-                    }}
-                    style={{
-                      background: "none",
-                      border: "none",
                       color: "rgba(0,243,255,0.45)",
-                      cursor: "pointer",
-                      fontSize: 11,
-                      padding: "0 2px",
+                      letterSpacing: 1,
+                      flexShrink: 0,
                     }}
                   >
-                    ◎
-                  </button>
-                  {/* Delete */}
+                    Y =
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={selectedAnchor.position[1]}
+                    onChange={(e) =>
+                      updateY(
+                        selectedAnchor.name,
+                        Number.parseFloat(e.target.value) || 0,
+                      )
+                    }
+                    style={{
+                      flex: 1,
+                      background: "rgba(0,0,0,0.5)",
+                      border: "1px solid rgba(0,243,255,0.3)",
+                      borderRadius: 3,
+                      color: "#00f3ff",
+                      fontFamily: "monospace",
+                      fontSize: 10,
+                      padding: "3px 6px",
+                      outline: "none",
+                    }}
+                  />
+                </div>
+                {/* Yaw rotation buttons */}
+                <div style={{ display: "flex", gap: 4 }}>
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteAnchor(anchor.name);
-                    }}
+                    onClick={() => rotateYaw(-1)}
+                    onMouseEnter={() => setHovered("rl")}
+                    onMouseLeave={() => setHovered(null)}
                     style={{
-                      background: "none",
-                      border: "none",
-                      color: "rgba(255,80,80,0.65)",
-                      cursor: "pointer",
-                      fontSize: 13,
-                      padding: "0 2px",
+                      ...btn("rl"),
+                      flex: 1,
+                      textAlign: "center" as const,
+                      fontSize: 11,
                     }}
                   >
-                    ×
+                    ← YAW
                   </button>
-                </button>
-              );
-            })}
+                  <button
+                    type="button"
+                    onClick={() => rotateYaw(1)}
+                    onMouseEnter={() => setHovered("rr")}
+                    onMouseLeave={() => setHovered(null)}
+                    style={{
+                      ...btn("rr"),
+                      flex: 1,
+                      textAlign: "center" as const,
+                      fontSize: 11,
+                    }}
+                  >
+                    YAW →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Scale panel */}
+            {onScaleChange && (
+              <div
+                style={{
+                  padding: "9px 14px",
+                  borderBottom: "1px solid rgba(0,243,255,0.1)",
+                  flexShrink: 0,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 8,
+                    letterSpacing: 2,
+                    color: "rgba(0,243,255,0.35)",
+                    marginBottom: 6,
+                  }}
+                >
+                  LAND SCALE
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[1, 12].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => onScaleChange(s)}
+                      style={{
+                        flex: 1,
+                        fontFamily: "monospace",
+                        fontSize: 9,
+                        padding: "4px",
+                        background:
+                          currentScale === s
+                            ? "rgba(0,243,255,0.12)"
+                            : "transparent",
+                        border: `1px solid ${
+                          currentScale === s
+                            ? "rgba(0,243,255,0.8)"
+                            : "rgba(0,243,255,0.22)"
+                        }`,
+                        borderRadius: 4,
+                        color:
+                          currentScale === s
+                            ? "#00f3ff"
+                            : "rgba(0,243,255,0.35)",
+                        cursor: "pointer",
+                        boxShadow:
+                          currentScale === s
+                            ? "0 0 6px rgba(0,243,255,0.28)"
+                            : "none",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      {s}×
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Anchor List */}
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                padding: "8px 14px",
+                scrollbarWidth: "thin",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 8,
+                  letterSpacing: 2,
+                  color: "rgba(0,243,255,0.35)",
+                  marginBottom: 6,
+                }}
+              >
+                ANCHORS ({totalUsed}/49)
+              </div>
+              {anchors.length === 0 && (
+                <div
+                  style={{
+                    fontSize: 9,
+                    color: "rgba(255,255,255,0.2)",
+                    textAlign: "center",
+                    marginTop: 20,
+                    lineHeight: 1.8,
+                  }}
+                >
+                  No anchors placed.
+                  <br />
+                  Press ADD NEW to start.
+                </div>
+              )}
+              {anchors.map((anchor) => {
+                const tc = tierColor(anchor.tier);
+                const isSel = anchor.name === selectedName;
+                return (
+                  <button
+                    key={anchor.name}
+                    type="button"
+                    onClick={() => setSelectedName(isSel ? null : anchor.name)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "4px 6px",
+                      marginBottom: 3,
+                      borderRadius: 4,
+                      background: isSel
+                        ? "rgba(255,255,0,0.06)"
+                        : "rgba(255,255,255,0.018)",
+                      border: `1px solid ${
+                        isSel
+                          ? "rgba(255,255,0,0.25)"
+                          : "rgba(255,255,255,0.05)"
+                      }`,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 1,
+                        background: tc,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span
+                      style={{
+                        flex: 1,
+                        fontSize: 9,
+                        color: isSel ? "#ffff00" : tc,
+                      }}
+                    >
+                      {anchor.name}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 8,
+                        color: "rgba(255,255,255,0.22)",
+                        marginRight: 2,
+                      }}
+                    >
+                      {anchor.position[0].toFixed(1)},
+                      {anchor.position[1].toFixed(1)},
+                      {anchor.position[2].toFixed(1)}
+                    </span>
+                    {/* Focus */}
+                    <button
+                      type="button"
+                      title="Focus"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedName(anchor.name);
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "rgba(0,243,255,0.45)",
+                        cursor: "pointer",
+                        fontSize: 11,
+                        padding: "0 2px",
+                      }}
+                    >
+                      ◎
+                    </button>
+                    {/* Delete */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteAnchor(anchor.name);
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "rgba(255,80,80,0.65)",
+                        cursor: "pointer",
+                        fontSize: 13,
+                        padding: "0 2px",
+                      }}
+                    >
+                      ×
+                    </button>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div
+            style={{
+              position: "absolute",
+              right: 16,
+              top: 16,
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              pointerEvents: "auto",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setIsHudOpen(true)}
+              style={{
+                fontFamily: "monospace",
+                fontSize: 9,
+                padding: "6px 10px",
+                background: "rgba(0,0,0,0.8)",
+                color: "#00f3ff",
+                border: "1px solid rgba(0,243,255,0.4)",
+                borderRadius: 6,
+                cursor: "pointer",
+                backdropFilter: "blur(10px)",
+                letterSpacing: 1,
+              }}
+            >
+              ☰ PANEL
+            </button>
+          </div>
+        )}
       </Html>
     </>
   );

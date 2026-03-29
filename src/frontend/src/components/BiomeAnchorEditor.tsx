@@ -143,7 +143,7 @@ export default function BiomeAnchorEditor({
           background: "rgba(0,0,0,0.9)",
           backdropFilter: "blur(10px)",
           borderBottom: "1px solid rgba(0,255,136,0.2)",
-          zIndex: 2,
+          zIndex: 99999,
         }}
       >
         <span
@@ -236,8 +236,8 @@ export default function BiomeAnchorEditor({
       {/* 3D Canvas — NOT keyed on biome to prevent crash */}
       <div style={{ flex: 1, position: "relative", background: "#000" }}>
         <Canvas
-          style={{ width: "100%", height: "100%" }}
-          gl={{ antialias: true }}
+          style={{ width: "100%", height: "100%", background: "#000" }}
+          gl={{ antialias: true, alpha: false }}
         >
           <SceneContent
             biome={selectedBiome}

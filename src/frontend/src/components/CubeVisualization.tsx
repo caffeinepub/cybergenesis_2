@@ -450,6 +450,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [anchorMode, setAnchorMode] = useState(false);
+  const [orbitEnabled, setOrbitEnabled] = useState(true);
   const landGroupRef = useRef<THREE.Group>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -500,7 +501,11 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
             <LandModel ref={landGroupRef} modelUrl={modelUrl} biome={biome} />
           )}
           {anchorMode && modelUrl && (
-            <AnchorBuilder landRef={landGroupRef} finalLandScale={1} />
+            <AnchorBuilder
+              landRef={landGroupRef}
+              finalLandScale={1}
+              setOrbitEnabled={setOrbitEnabled}
+            />
           )}
           <Environment
             files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/artist_workshop_1k.hdr"
@@ -514,7 +519,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           />
           <KeyLightSync />
           <SunLightSync />
-          <OrbitControls makeDefault />
+          <OrbitControls makeDefault enabled={orbitEnabled} />
           <SelectiveBloomEffect />
         </Suspense>
       </Canvas>
@@ -543,6 +548,31 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
       >
         {anchorMode ? "2b21 ANCHOR ON" : "2b21 ANCHOR"}
       </button>
+      {/* Exit anchor mode button */}
+      {anchorMode && (
+        <button
+          type="button"
+          onClick={() => setAnchorMode(false)}
+          style={{
+            position: "absolute",
+            bottom: "80px",
+            right: "16px",
+            zIndex: 50,
+            padding: "6px 10px",
+            fontSize: "9px",
+            fontFamily: "monospace",
+            letterSpacing: "1px",
+            background: "rgba(255,50,50,0.15)",
+            color: "#ff6060",
+            border: "1px solid rgba(255,80,80,0.6)",
+            borderRadius: "6px",
+            cursor: "pointer",
+            backdropFilter: "blur(10px)",
+          }}
+        >
+          ✕ EXIT ANCHOR
+        </button>
+      )}
       {/* Glassmorphism fullscreen toggle button */}
       <button
         type="button"
