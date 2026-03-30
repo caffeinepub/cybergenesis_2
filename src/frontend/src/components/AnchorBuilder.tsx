@@ -122,11 +122,49 @@ export default function AnchorBuilder({
   const [isHudOpen, setIsHudOpen] = useState(true);
 
   const groupRefs = useRef<Map<string, THREE.Group>>(new Map());
+  // Track position during TransformControls drag (avoid setState on every frame)
+  const positionTrackRef = useRef<[number, number, number]>([0, 0, 0]);
+  // Track previous biomeName to detect biome switches
+  const prevBiomeRef = useRef(biomeName);
 
-  // Persist to localStorage
+  // ── Reload anchors when biomeName changes (without remounting) ──────────────
+  useEffect(() => {
+    if (prevBiomeRef.current === biomeName) return;
+    // Save current anchors for the old biome
+    saveAnchors(prevBiomeRef.current, anchors);
+    // Load anchors for the new biome
+    setAnchors(loadAnchors(biomeName));
+    setSelectedName(null);
+    positionTrackRef.current = [0, 0, 0];
+    prevBiomeRef.current = biomeName;
+  }, [biomeName, anchors]);
+
+  // Persist to localStorage whenever anchors change
   useEffect(() => {
     saveAnchors(biomeName, anchors);
   }, [anchors, biomeName]);
+
+  // Mirror anchors state into a ref so scale effect can read it without a dep
+  const anchorsRef = useRef(anchors);
+  useEffect(() => {
+    anchorsRef.current = anchors;
+  }, [anchors]);
+
+  // Reposition all anchor groups when finalLandScale changes.
+  // Uses anchorsRef (stable ref) so this effect only fires on scale change.
+  useEffect(() => {
+    setSelectedName(null);
+    for (const anchor of anchorsRef.current) {
+      const g = groupRefs.current.get(anchor.name);
+      if (g) {
+        g.position.set(
+          anchor.position[0] * finalLandScale,
+          anchor.position[1] * finalLandScale,
+          anchor.position[2] * finalLandScale,
+        );
+      }
+    }
+  }, [finalLandScale]);
 
   const selectedAnchor = anchors.find((a) => a.name === selectedName) ?? null;
   const totalUsed = anchors.length;
@@ -349,17 +387,27 @@ export default function AnchorBuilder({
           showX={gizmoMode !== "rotate"}
           showZ={gizmoMode !== "rotate"}
           // @ts-ignore
-          onDraggingChanged={(e: any) => {
-            setOrbitEnabled?.(!e.value);
-            if (!e.value) syncTransform();
-          }}
           onChange={() => {
-            if (gizmoMode === "rotate") {
-              const g = groupRefs.current.get(selectedName);
-              if (g) {
+            const g = groupRefs.current.get(selectedName ?? "");
+            if (g) {
+              positionTrackRef.current = [
+                g.position.x,
+                g.position.y,
+                g.position.z,
+              ];
+              // In rotate mode, lock X and Z axes
+              if (gizmoMode === "rotate") {
                 g.rotation.x = 0;
                 g.rotation.z = 0;
               }
+            }
+          }}
+          // @ts-ignore
+          onDraggingChanged={(e: any) => {
+            setOrbitEnabled?.(!e.value);
+            if (!e.value) {
+              // Drag ended — sync group transform to React state
+              syncTransform();
             }
           }}
         />
@@ -847,9 +895,9 @@ export default function AnchorBuilder({
                         marginRight: 2,
                       }}
                     >
-                      {anchor.position[0].toFixed(1)},
-                      {anchor.position[1].toFixed(1)},
-                      {anchor.position[2].toFixed(1)}
+                      {anchor.position[0].toFixed(3)},
+                      {anchor.position[1].toFixed(3)},
+                      {anchor.position[2].toFixed(3)}
                     </span>
                     {/* Focus */}
                     <button

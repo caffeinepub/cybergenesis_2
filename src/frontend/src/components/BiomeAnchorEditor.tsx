@@ -51,8 +51,9 @@ function BiomeLandModel({
 
 /**
  * SceneContent — lives INSIDE the Canvas.
- * We keep ONE Canvas alive and swap content by keying inner elements.
- * This prevents drei <Html> from crashing when Canvas remounts.
+ * ONE Canvas stays alive; only inner model reloads on biome change.
+ * AnchorBuilder does NOT remount — it receives biomeName prop and
+ * handles the transition internally via prevBiomeRef useEffect.
  */
 function SceneContent({
   biome,
@@ -96,10 +97,9 @@ function SceneContent({
         )}
       </Suspense>
 
-      {/* AnchorBuilder — keyed per biome so state resets correctly */}
+      {/* AnchorBuilder — NOT keyed on biome; handles biome switch internally */}
       {modelUrl && (
         <AnchorBuilder
-          key={biome}
           landRef={landRef}
           finalLandScale={landScale}
           currentScale={landScale}
