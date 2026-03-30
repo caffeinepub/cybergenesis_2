@@ -22,7 +22,7 @@ type TierPrefix = (typeof TIERS)[number]["prefix"];
 interface Anchor {
   name: string;
   tier: TierPrefix;
-  position: [number, number, number];
+  position: [number, number, number]; // normalized (divided by scale)
   rotationY: number;
 }
 
@@ -32,7 +32,6 @@ export interface AnchorBuilderProps {
   biomeName?: string;
   onScaleChange?: (scale: number) => void;
   currentScale?: number;
-  /** pass setter so AnchorBuilder can control OrbitControls in parent */
   setOrbitEnabled?: (v: boolean) => void;
 }
 
@@ -53,7 +52,9 @@ function saveAnchors(biome: string, anchors: Anchor[]) {
   } catch {}
 }
 
-// ─── Anchor chassis: sphere + cylinder + nose cone ───────────────────────────
+// ─── Anchor chassis ──────────────────────────────────────────────────────────
+// Base sizes designed for scale=12. Wrapped group scales by finalLandScale/12
+// so chassis looks proportionally the same at any land scale.
 function AnchorChassis({
   color,
   selected,
@@ -61,7 +62,7 @@ function AnchorChassis({
   const c = selected ? "#ffff00" : color;
   return (
     <group>
-      {/* Ground ring — shows anchor base clearly */}
+      {/* Ground ring */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
         <ringGeometry args={[0.08, 0.13, 32]} />
         <meshBasicMaterial
@@ -71,12 +72,12 @@ function AnchorChassis({
           side={2}
         />
       </mesh>
-      {/* Pivot — large bright neon pink/yellow sphere */}
+      {/* Pivot sphere */}
       <mesh>
         <sphereGeometry args={[0.1, 16, 16]} />
         <meshBasicMaterial color={selected ? "#ffff00" : "#ff0099"} />
       </mesh>
-      {/* Outer glow ring around sphere */}
+      {/* Torus glow ring */}
       <mesh>
         <torusGeometry args={[0.14, 0.02, 8, 32]} />
         <meshBasicMaterial
@@ -85,12 +86,12 @@ function AnchorChassis({
           opacity={0.7}
         />
       </mesh>
-      {/* Height guide cylinder — bottom at y=0 */}
+      {/* Height guide cylinder */}
       <mesh position={[0, 0.9, 0]}>
         <cylinderGeometry args={[0.03, 0.03, 1.8, 12]} />
         <meshBasicMaterial color={c} transparent opacity={0.35} />
       </mesh>
-      {/* Directional nose — blue cone pointing +Z, shows forward direction */}
+      {/* Directional nose — +Z */}
       <mesh position={[0, 0.14, 0.22]} rotation={[Math.PI / 2, 0, 0]}>
         <coneGeometry args={[0.06, 0.18, 8]} />
         <meshBasicMaterial color="#00aaff" />
@@ -122,54 +123,110 @@ export default function AnchorBuilder({
   const [isHudOpen, setIsHudOpen] = useState(true);
 
   const groupRefs = useRef<Map<string, THREE.Group>>(new Map());
-  // Track position during TransformControls drag (avoid setState on every frame)
-  const positionTrackRef = useRef<[number, number, number]>([0, 0, 0]);
-  // Track previous biomeName to detect biome switches
+  const tcRef = useRef<any>(null);
+  const isDraggingRef = useRef(false);
+
+  // Stable refs to avoid stale closures in event listeners
+  const selectedNameRef = useRef<string | null>(null);
+  const finalLandScaleRef = useRef(finalLandScale);
+  const anchorsRef = useRef(anchors);
+  selectedNameRef.current = selectedName;
+  finalLandScaleRef.current = finalLandScale;
+  anchorsRef.current = anchors;
+
+  // Track previous biome to detect switches
   const prevBiomeRef = useRef(biomeName);
 
-  // ── Reload anchors when biomeName changes (without remounting) ──────────────
+  // ── Reload anchors on biome change ─────────────────────────────────────────
   useEffect(() => {
     if (prevBiomeRef.current === biomeName) return;
-    // Save current anchors for the old biome
-    saveAnchors(prevBiomeRef.current, anchors);
-    // Load anchors for the new biome
-    setAnchors(loadAnchors(biomeName));
+    saveAnchors(prevBiomeRef.current, anchorsRef.current);
+    const loaded = loadAnchors(biomeName);
+    setAnchors(loaded);
     setSelectedName(null);
-    positionTrackRef.current = [0, 0, 0];
     prevBiomeRef.current = biomeName;
-  }, [biomeName, anchors]);
+  }, [biomeName]);
 
-  // Persist to localStorage whenever anchors change
+  // ── Persist to localStorage ─────────────────────────────────────────────────
   useEffect(() => {
     saveAnchors(biomeName, anchors);
   }, [anchors, biomeName]);
 
-  // Mirror anchors state into a ref so scale effect can read it without a dep
-  const anchorsRef = useRef(anchors);
+  // ── Imperatively position all anchor groups when anchors or scale changes ───
+  // This is the ONLY place positions are applied to Three.js objects.
+  // No `position` prop on <group> to avoid R3F fighting TransformControls.
   useEffect(() => {
-    anchorsRef.current = anchors;
-  }, [anchors]);
-
-  // Reposition all anchor groups when finalLandScale changes.
-  // Uses anchorsRef (stable ref) so this effect only fires on scale change.
-  useEffect(() => {
-    setSelectedName(null);
-    for (const anchor of anchorsRef.current) {
+    for (const anchor of anchors) {
       const g = groupRefs.current.get(anchor.name);
-      if (g) {
+      if (g && !isDraggingRef.current) {
         g.position.set(
           anchor.position[0] * finalLandScale,
           anchor.position[1] * finalLandScale,
           anchor.position[2] * finalLandScale,
         );
+        g.rotation.set(0, anchor.rotationY, 0);
       }
     }
-  }, [finalLandScale]);
+  }, [anchors, finalLandScale]);
+
+  // ── TransformControls: bind events via ref (props don't fire reliably) ──────
+  useEffect(() => {
+    const tc = tcRef.current;
+    if (!tc || !selectedName) return;
+
+    const handleDraggingChanged = (e: { value: boolean }) => {
+      isDraggingRef.current = e.value;
+      setOrbitEnabled?.(!e.value);
+
+      if (!e.value) {
+        // Drag ended — sync group world position → normalized state
+        const name = selectedNameRef.current;
+        const scale = finalLandScaleRef.current;
+        const g = name ? groupRefs.current.get(name) : null;
+        if (g && name) {
+          const px = Number.parseFloat((g.position.x / scale).toFixed(4));
+          const py = Number.parseFloat((g.position.y / scale).toFixed(4));
+          const pz = Number.parseFloat((g.position.z / scale).toFixed(4));
+          // Lock X/Z rotation in rotate mode
+          const ry = gizmoMode === "rotate" ? g.rotation.y : g.rotation.y;
+          setAnchors((prev) =>
+            prev.map((a) =>
+              a.name === name
+                ? { ...a, position: [px, py, pz], rotationY: ry }
+                : a,
+            ),
+          );
+        }
+      }
+    };
+
+    const handleChange = () => {
+      if (gizmoMode === "rotate") {
+        // Lock X/Z rotation
+        const name = selectedNameRef.current;
+        const g = name ? groupRefs.current.get(name) : null;
+        if (g) {
+          g.rotation.x = 0;
+          g.rotation.z = 0;
+        }
+      }
+    };
+
+    tc.addEventListener("dragging-changed", handleDraggingChanged);
+    tc.addEventListener("change", handleChange);
+    return () => {
+      tc.removeEventListener("dragging-changed", handleDraggingChanged);
+      tc.removeEventListener("change", handleChange);
+    };
+  }, [selectedName, gizmoMode, setOrbitEnabled]);
 
   const selectedAnchor = anchors.find((a) => a.name === selectedName) ?? null;
   const totalUsed = anchors.length;
   const tierColor = (p: string) =>
     TIERS.find((t) => t.prefix === p)?.color ?? "#00ff88";
+
+  // Scale factor for chassis visual size: designed for scale 12, shrinks at lower scales
+  const chassisScale = Math.max(finalLandScale, 1) / 12;
 
   // ── Actions ────────────────────────────────────────────────────────────────
   const addAnchor = useCallback(() => {
@@ -217,29 +274,6 @@ export default function AnchorBuilder({
     }
   }, [biomeName]);
 
-  // Sync group transform → state on drag-end
-  const syncTransform = useCallback(() => {
-    if (!selectedName) return;
-    const g = groupRefs.current.get(selectedName);
-    if (!g) return;
-    const scale = finalLandScale;
-    setAnchors((prev) =>
-      prev.map((a) =>
-        a.name === selectedName
-          ? {
-              ...a,
-              position: [
-                Number.parseFloat((g.position.x / scale).toFixed(4)),
-                Number.parseFloat((g.position.y / scale).toFixed(4)),
-                Number.parseFloat((g.position.z / scale).toFixed(4)),
-              ],
-              rotationY: g.rotation.y,
-            }
-          : a,
-      ),
-    );
-  }, [selectedName, finalLandScale]);
-
   const updateY = useCallback((name: string, y: number) => {
     setAnchors((prev) =>
       prev.map((a) =>
@@ -248,9 +282,8 @@ export default function AnchorBuilder({
           : a,
       ),
     );
-    // Also update the live group
     const g = groupRefs.current.get(name);
-    if (g) g.position.y = y;
+    if (g) g.position.y = y * finalLandScaleRef.current;
   }, []);
 
   const rotateYaw = useCallback(
@@ -327,7 +360,6 @@ export default function AnchorBuilder({
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Camera */}
       {cameraMode === "perspective" ? (
         <PerspectiveCamera makeDefault position={[0, 5, 10]} fov={50} />
       ) : (
@@ -339,7 +371,7 @@ export default function AnchorBuilder({
         />
       )}
 
-      {/* Anchor 3D objects */}
+      {/* Anchor 3D objects — NO position prop; positioned imperatively via useEffect */}
       {anchors.map((anchor) => {
         const isSelected = anchor.name === selectedName;
         const color = tierColor(anchor.tier);
@@ -348,72 +380,56 @@ export default function AnchorBuilder({
           <group
             key={anchor.name}
             ref={(g) => {
-              if (g) groupRefs.current.set(anchor.name, g);
-              else groupRefs.current.delete(anchor.name);
+              if (g) {
+                groupRefs.current.set(anchor.name, g);
+                // Set position on mount
+                g.position.set(
+                  anchor.position[0] * finalLandScale,
+                  anchor.position[1] * finalLandScale,
+                  anchor.position[2] * finalLandScale,
+                );
+                g.rotation.set(0, anchor.rotationY, 0);
+              } else {
+                groupRefs.current.delete(anchor.name);
+              }
             }}
-            position={[
-              anchor.position[0] * finalLandScale,
-              anchor.position[1] * finalLandScale,
-              anchor.position[2] * finalLandScale,
-            ]}
-            rotation={[0, anchor.rotationY, 0]}
             onClick={(e) => {
               e.stopPropagation();
               setSelectedName(isSelected ? null : anchor.name);
             }}
           >
-            <AnchorChassis color={color} selected={isSelected} />
-            <Text
-              position={[0, 2.2, 0]}
-              fontSize={0.1}
-              color={isSelected ? "#ffff00" : color}
-              anchorX="center"
-              anchorY="middle"
-              outlineColor="#000000"
-              outlineWidth={0.008}
-            >
-              {anchor.name}
-            </Text>
+            {/* Scale chassis proportionally to land scale (designed for scale 12) */}
+            <group scale={[chassisScale, chassisScale, chassisScale]}>
+              <AnchorChassis color={color} selected={isSelected} />
+              <Text
+                position={[0, 2.2, 0]}
+                fontSize={0.1}
+                color={isSelected ? "#ffff00" : color}
+                anchorX="center"
+                anchorY="middle"
+                outlineColor="#000000"
+                outlineWidth={0.008}
+              >
+                {anchor.name}
+              </Text>
+            </group>
           </group>
         );
       })}
 
-      {/* TransformControls on selected anchor */}
+      {/* TransformControls — use ref for event binding */}
       {selectedName && groupRefs.current.has(selectedName) && (
         <TransformControls
+          ref={tcRef}
           object={groupRefs.current.get(selectedName)!}
           mode={gizmoMode}
           space="local"
           showX={gizmoMode !== "rotate"}
           showZ={gizmoMode !== "rotate"}
-          // @ts-ignore
-          onChange={() => {
-            const g = groupRefs.current.get(selectedName ?? "");
-            if (g) {
-              positionTrackRef.current = [
-                g.position.x,
-                g.position.y,
-                g.position.z,
-              ];
-              // In rotate mode, lock X and Z axes
-              if (gizmoMode === "rotate") {
-                g.rotation.x = 0;
-                g.rotation.z = 0;
-              }
-            }
-          }}
-          // @ts-ignore
-          onDraggingChanged={(e: any) => {
-            setOrbitEnabled?.(!e.value);
-            if (!e.value) {
-              // Drag ended — sync group transform to React state
-              syncTransform();
-            }
-          }}
         />
       )}
 
-      {/* ─── Glassmorphism HUD Sidebar ─── */}
+      {/* ─── Glassmorphism HUD ─── */}
       <Html fullscreen style={{ pointerEvents: "none" }}>
         {isHudOpen ? (
           <div
@@ -524,9 +540,7 @@ export default function AnchorBuilder({
                         fontSize: 8,
                         padding: "4px 2px",
                         background: isActive ? `${t.color}20` : "transparent",
-                        border: `1px solid ${
-                          isActive ? t.color : `${t.color}40`
-                        }`,
+                        border: `1px solid ${isActive ? t.color : `${t.color}40`}`,
                         borderRadius: 4,
                         color: isFull
                           ? `${t.color}40`
@@ -672,10 +686,9 @@ export default function AnchorBuilder({
                     marginBottom: 6,
                   }}
                 >
-                  X: {selectedAnchor.position[0].toFixed(3)} &nbsp; Z:
+                  X: {selectedAnchor.position[0].toFixed(3)} &nbsp; Z:{" "}
                   {selectedAnchor.position[2].toFixed(3)}
                 </div>
-                {/* Y manual input */}
                 <div
                   style={{
                     display: "flex",
@@ -717,7 +730,6 @@ export default function AnchorBuilder({
                     }}
                   />
                 </div>
-                {/* Yaw rotation buttons */}
                 <div style={{ display: "flex", gap: 4 }}>
                   <button
                     type="button"
@@ -785,11 +797,7 @@ export default function AnchorBuilder({
                           currentScale === s
                             ? "rgba(0,243,255,0.12)"
                             : "transparent",
-                        border: `1px solid ${
-                          currentScale === s
-                            ? "rgba(0,243,255,0.8)"
-                            : "rgba(0,243,255,0.22)"
-                        }`,
+                        border: `1px solid ${currentScale === s ? "rgba(0,243,255,0.8)" : "rgba(0,243,255,0.22)"}`,
                         borderRadius: 4,
                         color:
                           currentScale === s
@@ -862,12 +870,9 @@ export default function AnchorBuilder({
                       background: isSel
                         ? "rgba(255,255,0,0.06)"
                         : "rgba(255,255,255,0.018)",
-                      border: `1px solid ${
-                        isSel
-                          ? "rgba(255,255,0,0.25)"
-                          : "rgba(255,255,255,0.05)"
-                      }`,
+                      border: `1px solid ${isSel ? "rgba(255,255,0,0.25)" : "rgba(255,255,255,0.05)"}`,
                       cursor: "pointer",
+                      width: "100%",
                     }}
                   >
                     <div
@@ -899,7 +904,6 @@ export default function AnchorBuilder({
                       {anchor.position[1].toFixed(3)},
                       {anchor.position[2].toFixed(3)}
                     </span>
-                    {/* Focus */}
                     <button
                       type="button"
                       title="Focus"
@@ -918,7 +922,6 @@ export default function AnchorBuilder({
                     >
                       ◎
                     </button>
-                    {/* Delete */}
                     <button
                       type="button"
                       onClick={(e) => {
