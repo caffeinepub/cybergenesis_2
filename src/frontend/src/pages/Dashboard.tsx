@@ -132,6 +132,15 @@ export default function Dashboard() {
     );
   }
 
+  function normalizeBiomeKey(biome: unknown): string {
+    if (typeof biome === "string") return biome;
+    if (typeof biome === "object" && biome !== null) {
+      return (
+        Object.keys(biome as Record<string, unknown>)[0] ?? "FOREST_VALLEY"
+      );
+    }
+    return "FOREST_VALLEY";
+  }
   const currentLand = lands[selectedLandIndex];
 
   const tabs = [
@@ -148,7 +157,10 @@ export default function Dashboard() {
     <div className="dashboard-container flex flex-col min-h-screen bg-transparent">
       {isMapOpen && <MapView onClose={handleMapClose} />}
       {isAnchorEditorOpen && (
-        <BiomeAnchorEditor onClose={() => setIsAnchorEditorOpen(false)} />
+        <BiomeAnchorEditor
+          onClose={() => setIsAnchorEditorOpen(false)}
+          defaultBiome={normalizeBiomeKey(currentLand.biome)}
+        />
       )}
 
       <div className="dashboard min-h-screen text-white relative overflow-hidden">

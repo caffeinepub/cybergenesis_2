@@ -121,6 +121,7 @@ export default function AnchorBuilder({
   );
   const [hovered, setHovered] = useState<string | null>(null);
   const [isHudOpen, setIsHudOpen] = useState(true);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   const groupRefs = useRef<Map<string, THREE.Group>>(new Map());
   const tcRef = useRef<any>(null);
@@ -320,6 +321,32 @@ export default function AnchorBuilder({
     el.click();
     URL.revokeObjectURL(url);
   }, [anchors, biomeName]);
+
+  const copyToClipboard = useCallback(() => {
+    const data = anchors.map((a) => ({
+      id: a.name,
+      tier: a.tier,
+      position: a.position,
+      rotation: [0, a.rotationY, 0] as [number, number, number],
+    }));
+    const text = JSON.stringify(data, null, 2);
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2000);
+      })
+      .catch(() => {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2000);
+      });
+  }, [anchors]);
 
   // ── Button style helper ────────────────────────────────────────────────────
   const btn = (key: string, danger = false): React.CSSProperties => ({
@@ -656,6 +683,29 @@ export default function AnchorBuilder({
                   ✕ CLEAR ALL
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={copyToClipboard}
+                disabled={anchors.length === 0}
+                onMouseEnter={() => setHovered("copy")}
+                onMouseLeave={() => setHovered(null)}
+                style={{
+                  ...btn("copy"),
+                  width: "100%",
+                  textAlign: "center" as const,
+                  opacity: anchors.length === 0 ? 0.35 : 1,
+                  marginTop: 4,
+                  ...(copySuccess
+                    ? {
+                        color: "#00ff88",
+                        borderColor: "#00ff88",
+                        background: "rgba(0,255,136,0.08)",
+                      }
+                    : {}),
+                }}
+              >
+                {copySuccess ? "u2713 COPIED!" : "u29c9 COPY TO CLIPBOARD"}
+              </button>
             </div>
 
             {/* Selected Anchor Panel */}

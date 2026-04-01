@@ -114,8 +114,13 @@ function SceneContent({
 
 export default function BiomeAnchorEditor({
   onClose,
-}: { onClose: () => void }) {
-  const [selectedBiome, setSelectedBiome] = useState("FOREST_VALLEY");
+  defaultBiome,
+}: { onClose: () => void; defaultBiome?: string }) {
+  const initialBiome =
+    defaultBiome && BIOME_KEYS.includes(defaultBiome)
+      ? defaultBiome
+      : "FOREST_VALLEY";
+  const [selectedBiome, setSelectedBiome] = useState(initialBiome);
   const [landScale, setLandScale] = useState(1);
   const [orbitEnabled, setOrbitEnabled] = useState(true);
 
