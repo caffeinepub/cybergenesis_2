@@ -24,6 +24,8 @@ interface Anchor {
   tier: TierPrefix;
   position: [number, number, number]; // normalized (divided by scale)
   rotationY: number;
+  rotationX?: number; // used only when manual tilt is active
+  rotationZ?: number; // used only when manual tilt is active
 }
 
 export interface AnchorBuilderProps {
@@ -122,6 +124,8 @@ export default function AnchorBuilder({
   const [hovered, setHovered] = useState<string | null>(null);
   const [isHudOpen, setIsHudOpen] = useState(true);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [manualTilt, setManualTilt] = useState(false);
+  const [fillLight, setFillLight] = useState(false);
 
   const groupRefs = useRef<Map<string, THREE.Group>>(new Map());
   const tcRef = useRef<any>(null);
@@ -131,9 +135,11 @@ export default function AnchorBuilder({
   const selectedNameRef = useRef<string | null>(null);
   const finalLandScaleRef = useRef(finalLandScale);
   const anchorsRef = useRef(anchors);
+  const manualTiltRef = useRef(manualTilt);
   selectedNameRef.current = selectedName;
   finalLandScaleRef.current = finalLandScale;
   anchorsRef.current = anchors;
+  manualTiltRef.current = manualTilt;
 
   // Track previous biome to detect switches
   const prevBiomeRef = useRef(biomeName);
@@ -165,7 +171,11 @@ export default function AnchorBuilder({
           anchor.position[1] * finalLandScale,
           anchor.position[2] * finalLandScale,
         );
-        g.rotation.set(0, anchor.rotationY, 0);
+        g.rotation.set(
+          anchor.rotationX ?? 0,
+          anchor.rotationY,
+          anchor.rotationZ ?? 0,
+        );
       }
     }
   }, [anchors, finalLandScale]);
@@ -188,12 +198,19 @@ export default function AnchorBuilder({
           const px = Number.parseFloat((g.position.x / scale).toFixed(4));
           const py = Number.parseFloat((g.position.y / scale).toFixed(4));
           const pz = Number.parseFloat((g.position.z / scale).toFixed(4));
-          // Lock X/Z rotation in rotate mode
-          const ry = gizmoMode === "rotate" ? g.rotation.y : g.rotation.y;
+          const rx = manualTiltRef.current ? g.rotation.x : 0;
+          const ry = g.rotation.y;
+          const rz = manualTiltRef.current ? g.rotation.z : 0;
           setAnchors((prev) =>
             prev.map((a) =>
               a.name === name
-                ? { ...a, position: [px, py, pz], rotationY: ry }
+                ? {
+                    ...a,
+                    position: [px, py, pz],
+                    rotationY: ry,
+                    rotationX: rx,
+                    rotationZ: rz,
+                  }
                 : a,
             ),
           );
@@ -202,8 +219,8 @@ export default function AnchorBuilder({
     };
 
     const handleChange = () => {
-      if (gizmoMode === "rotate") {
-        // Lock X/Z rotation
+      if (gizmoMode === "rotate" && !manualTiltRef.current) {
+        // Lock X/Z rotation when manual tilt is OFF
         const name = selectedNameRef.current;
         const g = name ? groupRefs.current.get(name) : null;
         if (g) {
@@ -304,13 +321,21 @@ export default function AnchorBuilder({
     [selectedName],
   );
 
-  const exportJson = useCallback(() => {
-    const data = anchors.map((a) => ({
+  const buildExportData = useCallback(() => {
+    return anchors.map((a) => ({
       id: a.name,
       tier: a.tier,
       position: a.position,
-      rotation: [0, a.rotationY, 0] as [number, number, number],
+      rotation: [a.rotationX ?? 0, a.rotationY, a.rotationZ ?? 0] as [
+        number,
+        number,
+        number,
+      ],
     }));
+  }, [anchors]);
+
+  const exportJson = useCallback(() => {
+    const data = buildExportData();
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json",
     });
@@ -320,15 +345,10 @@ export default function AnchorBuilder({
     el.download = `anchors_${biomeName}.json`;
     el.click();
     URL.revokeObjectURL(url);
-  }, [anchors, biomeName]);
+  }, [buildExportData, biomeName]);
 
   const copyToClipboard = useCallback(() => {
-    const data = anchors.map((a) => ({
-      id: a.name,
-      tier: a.tier,
-      position: a.position,
-      rotation: [0, a.rotationY, 0] as [number, number, number],
-    }));
+    const data = buildExportData();
     const text = JSON.stringify(data, null, 2);
     navigator.clipboard
       .writeText(text)
@@ -346,7 +366,7 @@ export default function AnchorBuilder({
         setCopySuccess(true);
         setTimeout(() => setCopySuccess(false), 2000);
       });
-  }, [anchors]);
+  }, [buildExportData]);
 
   // ── Button style helper ────────────────────────────────────────────────────
   const btn = (key: string, danger = false): React.CSSProperties => ({
@@ -387,6 +407,49 @@ export default function AnchorBuilder({
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
+      {/* Fill light toggle — directional lights from all 6 axes for uniform illumination */}
+      {fillLight && (
+        <>
+          <hemisphereLight args={["#ffffff", "#ccddff", 3.0]} />
+          <directionalLight
+            position={[0, 10, 0]}
+            intensity={2.5}
+            color="#ffffff"
+          />{" "}
+          {/* top */}
+          <directionalLight
+            position={[0, -10, 0]}
+            intensity={1.5}
+            color="#aaccff"
+          />{" "}
+          {/* bottom */}
+          <directionalLight
+            position={[10, 0, 0]}
+            intensity={2.0}
+            color="#e8f4ff"
+          />{" "}
+          {/* right */}
+          <directionalLight
+            position={[-10, 0, 0]}
+            intensity={2.0}
+            color="#e8f4ff"
+          />{" "}
+          {/* left */}
+          <directionalLight
+            position={[0, 0, 10]}
+            intensity={2.0}
+            color="#e0f0ff"
+          />{" "}
+          {/* front */}
+          <directionalLight
+            position={[0, 0, -10]}
+            intensity={2.0}
+            color="#ffe8d0"
+          />{" "}
+          {/* back */}
+        </>
+      )}
+
       {cameraMode === "perspective" ? (
         <PerspectiveCamera makeDefault position={[0, 5, 10]} fov={50} />
       ) : (
@@ -415,7 +478,11 @@ export default function AnchorBuilder({
                   anchor.position[1] * finalLandScale,
                   anchor.position[2] * finalLandScale,
                 );
-                g.rotation.set(0, anchor.rotationY, 0);
+                g.rotation.set(
+                  anchor.rotationX ?? 0,
+                  anchor.rotationY,
+                  anchor.rotationZ ?? 0,
+                );
               } else {
                 groupRefs.current.delete(anchor.name);
               }
@@ -451,8 +518,12 @@ export default function AnchorBuilder({
           object={groupRefs.current.get(selectedName)!}
           mode={gizmoMode}
           space="local"
-          showX={gizmoMode !== "rotate"}
-          showZ={gizmoMode !== "rotate"}
+          showX={
+            gizmoMode === "translate" || (gizmoMode === "rotate" && manualTilt)
+          }
+          showZ={
+            gizmoMode === "translate" || (gizmoMode === "rotate" && manualTilt)
+          }
         />
       )}
 
@@ -651,6 +722,49 @@ export default function AnchorBuilder({
                   {cameraMode === "perspective" ? "📷 PERSP" : "📐 ORTHO"}
                 </button>
               </div>
+              {/* Manual Tilt + Fill Light row */}
+              <div style={{ display: "flex", gap: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => setManualTilt((v) => !v)}
+                  onMouseEnter={() => setHovered("tilt")}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    ...btn("tilt"),
+                    flex: 1,
+                    textAlign: "center" as const,
+                    ...(manualTilt
+                      ? {
+                          color: "#ff9900",
+                          borderColor: "rgba(255,153,0,0.8)",
+                          background: "rgba(255,153,0,0.1)",
+                        }
+                      : {}),
+                  }}
+                >
+                  {manualTilt ? "⊕ TILT ON" : "⊕ TILT OFF"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFillLight((v) => !v)}
+                  onMouseEnter={() => setHovered("light")}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    ...btn("light"),
+                    flex: 1,
+                    textAlign: "center" as const,
+                    ...(fillLight
+                      ? {
+                          color: "#ffff88",
+                          borderColor: "rgba(255,255,100,0.8)",
+                          background: "rgba(255,255,100,0.08)",
+                        }
+                      : {}),
+                  }}
+                >
+                  {fillLight ? "\u2600 LIGHT ON" : "\u2600 LIGHT OFF"}
+                </button>
+              </div>
               <div style={{ display: "flex", gap: 4 }}>
                 <button
                   type="button"
@@ -704,7 +818,7 @@ export default function AnchorBuilder({
                     : {}),
                 }}
               >
-                {copySuccess ? "u2713 COPIED!" : "u29c9 COPY TO CLIPBOARD"}
+                {copySuccess ? "\u2713 COPIED!" : "\u29c9 COPY TO CLIPBOARD"}
               </button>
             </div>
 

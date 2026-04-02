@@ -34,6 +34,32 @@ const BIOME_LABELS: Record<string, string> = {
 
 const BIOME_KEYS = Object.keys(BIOME_MODEL_MAP);
 
+// ─── Biome key normalization ─────────────────────────────────────────────────
+const BACKEND_BIOME_MAP: Record<string, string> = {
+  Forest: "FOREST_VALLEY",
+  FOREST_VALLEY: "FOREST_VALLEY",
+  Desert: "DESERT_DUNE",
+  DESERT_DUNE: "DESERT_DUNE",
+  Ocean: "ISLAND_ARCHIPELAGO",
+  ISLAND_ARCHIPELAGO: "ISLAND_ARCHIPELAGO",
+  Mountain: "SNOW_PEAK",
+  Tundra: "SNOW_PEAK",
+  SNOW_PEAK: "SNOW_PEAK",
+  Volcano: "VOLCANIC_CRAG",
+  VOLCANIC_CRAG: "VOLCANIC_CRAG",
+  MYTHIC_VOID: "MYTHIC_VOID",
+  MYTHIC_AETHER: "MYTHIC_AETHER",
+};
+
+function normalizeBiomeForEditor(biome: unknown): string {
+  let key: string;
+  if (typeof biome === "string") key = biome;
+  else if (typeof biome === "object" && biome !== null)
+    key = Object.keys(biome as Record<string, unknown>)[0] ?? "";
+  else key = "";
+  return BACKEND_BIOME_MAP[key] ?? "FOREST_VALLEY";
+}
+
 function BiomeLandModel({
   modelUrl,
   landRef,
@@ -116,10 +142,7 @@ export default function BiomeAnchorEditor({
   onClose,
   defaultBiome,
 }: { onClose: () => void; defaultBiome?: string }) {
-  const initialBiome =
-    defaultBiome && BIOME_KEYS.includes(defaultBiome)
-      ? defaultBiome
-      : "FOREST_VALLEY";
+  const initialBiome = normalizeBiomeForEditor(defaultBiome);
   const [selectedBiome, setSelectedBiome] = useState(initialBiome);
   const [landScale, setLandScale] = useState(1);
   const [orbitEnabled, setOrbitEnabled] = useState(true);
