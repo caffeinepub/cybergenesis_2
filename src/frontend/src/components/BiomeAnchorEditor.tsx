@@ -99,8 +99,6 @@ function SceneContent({
 
   return (
     <>
-      {/* Black scene background — prevents purple gradient bleed */}
-      <color attach="background" args={["#000000"]} />
       <ambientLight intensity={0.8} />
       <directionalLight position={[5, 10, 5]} intensity={1.5} />
 
@@ -266,7 +264,12 @@ export default function BiomeAnchorEditor({
         <Canvas
           style={{ width: "100%", height: "100%", background: "#000" }}
           gl={{ antialias: true, alpha: false }}
+          onCreated={({ gl }) => {
+            gl.setClearColor(0x000000, 1);
+          }}
         >
+          {/* Permanent black background — survives Suspense / biome switches */}
+          <color attach="background" args={["#000000"]} />
           <SceneContent
             biome={selectedBiome}
             landScale={landScale}
