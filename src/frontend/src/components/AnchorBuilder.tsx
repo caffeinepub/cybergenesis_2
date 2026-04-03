@@ -1,10 +1,4 @@
-import {
-  Html,
-  OrthographicCamera,
-  PerspectiveCamera,
-  Text,
-  TransformControls,
-} from "@react-three/drei";
+import { Html, TransformControls } from "@react-three/drei";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import type * as THREE from "three";
@@ -24,8 +18,8 @@ interface Anchor {
   tier: TierPrefix;
   position: [number, number, number]; // normalized (divided by scale)
   rotationY: number;
-  rotationX?: number; // used only when manual tilt is active
-  rotationZ?: number; // used only when manual tilt is active
+  rotationX?: number;
+  rotationZ?: number;
 }
 
 export interface AnchorBuilderProps {
@@ -37,7 +31,7 @@ export interface AnchorBuilderProps {
   setOrbitEnabled?: (v: boolean) => void;
 }
 
-// ─── localStorage helpers ────────────────────────────────────────────────────
+// ─── localStorage helpers ─────────────────────────────────────────────────────
 function storageKey(biome: string) {
   return `cyberland_anchors_${biome}`;
 }
@@ -54,14 +48,11 @@ function saveAnchors(biome: string, anchors: Anchor[]) {
   } catch {}
 }
 
-// ─── Anchor chassis ──────────────────────────────────────────────────────────
-// Base sizes designed for scale=12. Wrapped group scales by finalLandScale/12
-// so chassis looks proportionally the same at any land scale.
+// ─── Anchor chassis ───────────────────────────────────────────────────────────
 function AnchorChassis({
   color,
   selected,
 }: { color: string; selected: boolean }) {
-  const c = selected ? "#ffff00" : color;
   return (
     <group>
       {/* Ground ring */}
@@ -91,18 +82,23 @@ function AnchorChassis({
       {/* Height guide cylinder */}
       <mesh position={[0, 0.9, 0]}>
         <cylinderGeometry args={[0.03, 0.03, 1.8, 12]} />
-        <meshBasicMaterial color={c} transparent opacity={0.35} />
+        <meshBasicMaterial
+          color={selected ? "#ffff00" : color}
+          transparent
+          opacity={0.35}
+        />
       </mesh>
       {/* Directional nose — +Z */}
       <mesh position={[0, 0.14, 0.22]} rotation={[Math.PI / 2, 0, 0]}>
         <coneGeometry args={[0.06, 0.18, 8]} />
         <meshBasicMaterial color="#00aaff" />
       </mesh>
+      {/* Name label — using DOM overlay to avoid drei/Text suspend issues */}
     </group>
   );
 }
 
-// ─── Main Component ──────────────────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function AnchorBuilder({
   biomeName = "BIOME",
   finalLandScale = 1,
@@ -118,9 +114,6 @@ export default function AnchorBuilder({
   const [gizmoMode, setGizmoMode] = useState<"translate" | "rotate">(
     "translate",
   );
-  const [cameraMode, setCameraMode] = useState<"perspective" | "ortho">(
-    "perspective",
-  );
   const [hovered, setHovered] = useState<string | null>(null);
   const [isHudOpen, setIsHudOpen] = useState(true);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -131,7 +124,6 @@ export default function AnchorBuilder({
   const tcRef = useRef<any>(null);
   const isDraggingRef = useRef(false);
 
-  // Stable refs to avoid stale closures in event listeners
   const selectedNameRef = useRef<string | null>(null);
   const finalLandScaleRef = useRef(finalLandScale);
   const anchorsRef = useRef(anchors);
@@ -141,10 +133,9 @@ export default function AnchorBuilder({
   anchorsRef.current = anchors;
   manualTiltRef.current = manualTilt;
 
-  // Track previous biome to detect switches
   const prevBiomeRef = useRef(biomeName);
 
-  // ── Reload anchors on biome change ─────────────────────────────────────────
+  // ── Reload anchors on biome change ──────────────────────────────────────────
   useEffect(() => {
     if (prevBiomeRef.current === biomeName) return;
     saveAnchors(prevBiomeRef.current, anchorsRef.current);
@@ -154,14 +145,12 @@ export default function AnchorBuilder({
     prevBiomeRef.current = biomeName;
   }, [biomeName]);
 
-  // ── Persist to localStorage ─────────────────────────────────────────────────
+  // ── Persist to localStorage ──────────────────────────────────────────────────
   useEffect(() => {
     saveAnchors(biomeName, anchors);
   }, [anchors, biomeName]);
 
-  // ── Imperatively position all anchor groups when anchors or scale changes ───
-  // This is the ONLY place positions are applied to Three.js objects.
-  // No `position` prop on <group> to avoid R3F fighting TransformControls.
+  // ── Imperatively position all anchor groups ──────────────────────────────────
   useEffect(() => {
     for (const anchor of anchors) {
       const g = groupRefs.current.get(anchor.name);
@@ -180,7 +169,7 @@ export default function AnchorBuilder({
     }
   }, [anchors, finalLandScale]);
 
-  // ── TransformControls: bind events via ref (props don't fire reliably) ──────
+  // ── TransformControls event binding ─────────────────────────────────────────
   useEffect(() => {
     const tc = tcRef.current;
     if (!tc || !selectedName) return;
@@ -190,7 +179,6 @@ export default function AnchorBuilder({
       setOrbitEnabled?.(!e.value);
 
       if (!e.value) {
-        // Drag ended — sync group world position → normalized state
         const name = selectedNameRef.current;
         const scale = finalLandScaleRef.current;
         const g = name ? groupRefs.current.get(name) : null;
@@ -220,7 +208,6 @@ export default function AnchorBuilder({
 
     const handleChange = () => {
       if (gizmoMode === "rotate" && !manualTiltRef.current) {
-        // Lock X/Z rotation when manual tilt is OFF
         const name = selectedNameRef.current;
         const g = name ? groupRefs.current.get(name) : null;
         if (g) {
@@ -243,10 +230,9 @@ export default function AnchorBuilder({
   const tierColor = (p: string) =>
     TIERS.find((t) => t.prefix === p)?.color ?? "#00ff88";
 
-  // Scale factor for chassis visual size: designed for scale 12, shrinks at lower scales
   const chassisScale = Math.max(finalLandScale, 1) / 12;
 
-  // ── Actions ────────────────────────────────────────────────────────────────
+  // ── Actions ──────────────────────────────────────────────────────────────────
   const addAnchor = useCallback(() => {
     const tierDef = TIERS.find((t) => t.prefix === activeTier);
     if (!tierDef) return;
@@ -368,7 +354,6 @@ export default function AnchorBuilder({
       });
   }, [buildExportData]);
 
-  // ── Button style helper ────────────────────────────────────────────────────
   const btn = (key: string, danger = false): React.CSSProperties => ({
     fontFamily: "monospace",
     fontSize: 10,
@@ -404,10 +389,9 @@ export default function AnchorBuilder({
     textAlign: "left" as const,
   });
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Fill light toggle — directional lights from all 6 axes for uniform illumination */}
+      {/* Fill light */}
       {fillLight && (
         <>
           <hemisphereLight args={["#ffffff", "#ccddff", 3.0]} />
@@ -415,53 +399,38 @@ export default function AnchorBuilder({
             position={[0, 10, 0]}
             intensity={2.5}
             color="#ffffff"
-          />{" "}
-          {/* top */}
+          />
           <directionalLight
             position={[0, -10, 0]}
             intensity={1.5}
             color="#aaccff"
-          />{" "}
-          {/* bottom */}
+          />
           <directionalLight
             position={[10, 0, 0]}
             intensity={2.0}
             color="#e8f4ff"
-          />{" "}
-          {/* right */}
+          />
           <directionalLight
             position={[-10, 0, 0]}
             intensity={2.0}
             color="#e8f4ff"
-          />{" "}
-          {/* left */}
+          />
           <directionalLight
             position={[0, 0, 10]}
             intensity={2.0}
             color="#e0f0ff"
-          />{" "}
-          {/* front */}
+          />
           <directionalLight
             position={[0, 0, -10]}
             intensity={2.0}
             color="#ffe8d0"
-          />{" "}
-          {/* back */}
+          />
         </>
       )}
 
-      {cameraMode === "perspective" ? (
-        <PerspectiveCamera makeDefault position={[0, 5, 10]} fov={50} />
-      ) : (
-        <OrthographicCamera
-          makeDefault
-          position={[15, 0, 0]}
-          zoom={40}
-          up={[0, 1, 0]}
-        />
-      )}
+      {/* NOTE: Camera is now managed by BiomeAnchorEditor's SceneContent, NOT here */}
 
-      {/* Anchor 3D objects — NO position prop; positioned imperatively via useEffect */}
+      {/* Anchor 3D objects */}
       {anchors.map((anchor) => {
         const isSelected = anchor.name === selectedName;
         const color = tierColor(anchor.tier);
@@ -472,7 +441,6 @@ export default function AnchorBuilder({
             ref={(g) => {
               if (g) {
                 groupRefs.current.set(anchor.name, g);
-                // Set position on mount
                 g.position.set(
                   anchor.position[0] * finalLandScale,
                   anchor.position[1] * finalLandScale,
@@ -492,26 +460,33 @@ export default function AnchorBuilder({
               setSelectedName(isSelected ? null : anchor.name);
             }}
           >
-            {/* Scale chassis proportionally to land scale (designed for scale 12) */}
             <group scale={[chassisScale, chassisScale, chassisScale]}>
               <AnchorChassis color={color} selected={isSelected} />
-              <Text
-                position={[0, 2.2, 0]}
-                fontSize={0.1}
-                color={isSelected ? "#ffff00" : color}
-                anchorX="center"
-                anchorY="middle"
-                outlineColor="#000000"
-                outlineWidth={0.008}
+            </group>
+            {/* Label via Html to avoid drei/Text Suspense issues during biome switch */}
+            <Html
+              position={[0, chassisScale * 2.4, 0]}
+              center
+              style={{ pointerEvents: "none" }}
+            >
+              <span
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: 9,
+                  color: isSelected ? "#ffff00" : color,
+                  textShadow: "0 0 4px #000, 0 0 4px #000",
+                  whiteSpace: "nowrap",
+                  userSelect: "none",
+                }}
               >
                 {anchor.name}
-              </Text>
-            </group>
+              </span>
+            </Html>
           </group>
         );
       })}
 
-      {/* TransformControls — use ref for event binding */}
+      {/* TransformControls */}
       {selectedName && groupRefs.current.has(selectedName) && (
         <TransformControls
           ref={tcRef}
@@ -527,7 +502,7 @@ export default function AnchorBuilder({
         />
       )}
 
-      {/* ─── Glassmorphism HUD ─── */}
+      {/* HUD */}
       <Html fullscreen style={{ pointerEvents: "none" }}>
         {isHudOpen ? (
           <div
@@ -704,25 +679,7 @@ export default function AnchorBuilder({
                 >
                   {gizmoMode === "translate" ? "⇄ MOVE" : "↻ ROTATE"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCameraMode(
-                      cameraMode === "perspective" ? "ortho" : "perspective",
-                    )
-                  }
-                  onMouseEnter={() => setHovered("cam")}
-                  onMouseLeave={() => setHovered(null)}
-                  style={{
-                    ...btn("cam"),
-                    flex: 1,
-                    textAlign: "center" as const,
-                  }}
-                >
-                  {cameraMode === "perspective" ? "📷 PERSP" : "📐 ORTHO"}
-                </button>
               </div>
-              {/* Manual Tilt + Fill Light row */}
               <div style={{ display: "flex", gap: 4 }}>
                 <button
                   type="button"
