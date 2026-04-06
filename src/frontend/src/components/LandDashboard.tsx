@@ -11,6 +11,13 @@ import {
 } from "@/hooks/useQueries";
 import * as fakeCbr from "@/lib/fakeCbr";
 import type { LocalModifier } from "@/lib/fakeCbr";
+import {
+  type InstalledMod,
+  getFreeSlotCount,
+  getInstalledMods,
+  installMod,
+  uninstallMod,
+} from "@/lib/modInstallation";
 import { formatTokenBalance } from "@/lib/tokenUtils";
 import {
   BatteryCharging,
@@ -23,6 +30,20 @@ import {
 } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
+
+const RARITY_COLORS: Record<number, string> = {
+  1: "#9CA3AF",
+  2: "#60A5FA",
+  3: "#A855F7",
+  4: "#FACC15",
+};
+
+function normalizeLandBiome(biome: unknown): string {
+  if (typeof biome === "string") return biome;
+  if (typeof biome === "object" && biome !== null)
+    return Object.keys(biome as Record<string, unknown>)[0] ?? "FOREST_VALLEY";
+  return "FOREST_VALLEY";
+}
 
 interface LandDashboardProps {
   selectedLandIndex: number;
@@ -55,13 +76,23 @@ export default function LandDashboard({
     fakeCbr.getCrystals(),
   );
   const [localModifiers, setLocalModifiers] = useState<LocalModifier[]>(() =>
-    fakeCbr.getLocalModifiers(),
+    fakeCbr.getAllLocalModifiers(),
   );
+
+  const selectedLand: LandData | undefined = lands?.[selectedLandIndex];
+
+  const [installedMods, setInstalledMods] = useState<InstalledMod[]>(() => {
+    if (!selectedLand) return [];
+    return getInstalledMods(selectedLand.landId.toString());
+  });
 
   const refreshInventory = () => {
     setBoosterStacks(fakeCbr.getBoosters());
     setCrystalStacks(fakeCbr.getCrystals());
-    setLocalModifiers(fakeCbr.getLocalModifiers());
+    setLocalModifiers(fakeCbr.getAllLocalModifiers());
+    if (selectedLand) {
+      setInstalledMods(getInstalledMods(selectedLand.landId.toString()));
+    }
   };
 
   // Periodically refresh inventory to pick up new items from cache openings
@@ -69,12 +100,20 @@ export default function LandDashboard({
     const interval = setInterval(() => {
       setBoosterStacks(fakeCbr.getBoosters());
       setCrystalStacks(fakeCbr.getCrystals());
-      setLocalModifiers(fakeCbr.getLocalModifiers());
+      setLocalModifiers(fakeCbr.getAllLocalModifiers());
+      if (selectedLand) {
+        setInstalledMods(getInstalledMods(selectedLand.landId.toString()));
+      }
     }, 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedLand]);
 
-  const selectedLand: LandData | undefined = lands?.[selectedLandIndex];
+  // Refresh installedMods when land changes
+  useEffect(() => {
+    if (selectedLand) {
+      setInstalledMods(getInstalledMods(selectedLand.landId.toString()));
+    }
+  }, [selectedLand]);
 
   const landIdForCharge = selectedLand?.landId;
   const chargeCapForEffect = selectedLand
@@ -183,9 +222,25 @@ export default function LandDashboard({
       toast.error("Выберите участок");
       return;
     }
-    fakeCbr.markModifierApplied(instanceId, land.landId.toString());
-    setLocalModifiers(fakeCbr.getLocalModifiers());
-    toast.success("Модификатор установлен!");
+    const landId = land.landId.toString();
+    const result = installMod(instanceId, landId);
+    if (!result) {
+      toast.error("Нет свободных слотов этого тира!");
+      return;
+    }
+    setLocalModifiers(fakeCbr.getAllLocalModifiers());
+    setInstalledMods(getInstalledMods(landId));
+    toast.success(`Установлен в слот ${result.slotId}`);
+  };
+
+  const handleRemoveModifier = (instanceId: number) => {
+    const land = selectedLand;
+    if (!land) return;
+    const landId = land.landId.toString();
+    uninstallMod(instanceId, landId);
+    setLocalModifiers(fakeCbr.getAllLocalModifiers());
+    setInstalledMods(getInstalledMods(landId));
+    toast.success("Модификатор снят со слота");
   };
 
   const handleUpgradePlot = async () => {
@@ -370,7 +425,8 @@ export default function LandDashboard({
             <div>
               <p className="text-white/50 text-sm font-jetbrains">Biome</p>
               <p className="text-white font-medium font-jetbrains">
-                {biomeNames[selectedLand.biome] || selectedLand.biome}
+                {biomeNames[normalizeLandBiome(selectedLand.biome)] ||
+                  normalizeLandBiome(selectedLand.biome)}
               </p>
             </div>
             <div>
@@ -516,6 +572,9 @@ export default function LandDashboard({
                   (m) => m.modifierType === modifier.modifierType,
                 ).length;
                 const isInstalled = !!modifier.appliedToLand;
+                const matchingInstalledMod = installedMods.find(
+                  (im) => im.instanceId === modifier.instanceId,
+                );
                 return (
                   <div
                     key={modifier.instanceId}
@@ -545,13 +604,25 @@ export default function LandDashboard({
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-white font-medium font-jetbrains text-sm truncate">
                             {modifier.displayName}
                           </p>
                           {countOfThisType >= 2 && (
                             <span className="text-[10px] font-jetbrains text-[#9933ff]/70 bg-[#9933ff]/10 px-1 rounded flex-shrink-0">
                               x{countOfThisType}
+                            </span>
+                          )}
+                          {matchingInstalledMod && (
+                            <span
+                              className="text-[10px] font-mono px-1.5 py-0.5 rounded flex-shrink-0 font-bold"
+                              style={{
+                                color: RARITY_COLORS[rarityTier] ?? "#9CA3AF",
+                                background: `${RARITY_COLORS[rarityTier] ?? "#9CA3AF"}18`,
+                                border: `1px solid ${RARITY_COLORS[rarityTier] ?? "#9CA3AF"}40`,
+                              }}
+                            >
+                              {matchingInstalledMod.slotId}
                             </span>
                           )}
                         </div>
@@ -565,9 +636,9 @@ export default function LandDashboard({
                       {isInstalled ? (
                         <button
                           type="button"
-                          onClick={() => {
-                            /* remove logic */
-                          }}
+                          onClick={() =>
+                            handleRemoveModifier(modifier.instanceId)
+                          }
                           className="px-2 py-2 rounded-lg bg-[#ff3344]/20 border border-[#ff3344]/50 text-[#ff3344] text-xs font-orbitron hover:bg-[#ff3344]/30 transition-all disabled:opacity-50 min-w-[60px]"
                         >
                           REMOVE
@@ -587,6 +658,77 @@ export default function LandDashboard({
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Installed mods on land */}
+          {installedMods.length > 0 && (
+            <div className="mt-5 pt-4 border-t border-[#9933ff]/20">
+              <p
+                className="text-xs font-mono tracking-widest mb-3 uppercase"
+                style={{ color: "rgba(153,51,255,0.6)" }}
+              >
+                УСТАНОВЛЕНЫ НА ЗЕМЛЕ
+              </p>
+              <div className="space-y-2">
+                {installedMods.map((im) => {
+                  const slotColor = RARITY_COLORS[im.rarityTier] ?? "#9CA3AF";
+                  return (
+                    <div
+                      key={im.instanceId}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                      style={{
+                        background: `${slotColor}08`,
+                        border: `1px solid ${slotColor}25`,
+                      }}
+                    >
+                      <span
+                        className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded flex-shrink-0"
+                        style={{
+                          color: slotColor,
+                          background: `${slotColor}18`,
+                          border: `1px solid ${slotColor}40`,
+                        }}
+                      >
+                        {im.slotId}
+                      </span>
+                      {im.assetUrl ? (
+                        <img
+                          src={im.assetUrl}
+                          alt={im.modifierName}
+                          className="w-6 h-6 rounded object-contain flex-shrink-0"
+                          style={{
+                            filter: `drop-shadow(0 0 4px ${slotColor}60)`,
+                          }}
+                        />
+                      ) : (
+                        <div
+                          className="w-6 h-6 rounded flex-shrink-0"
+                          style={{ background: `${slotColor}20` }}
+                        />
+                      )}
+                      <p
+                        className="flex-1 min-w-0 text-xs font-jetbrains truncate"
+                        style={{ color: "rgba(255,255,255,0.75)" }}
+                      >
+                        {im.modifierName}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveModifier(im.instanceId)}
+                        className="flex-shrink-0 px-2 py-1 rounded text-[10px] font-orbitron transition-all"
+                        style={{
+                          background: "rgba(255,51,68,0.12)",
+                          border: "1px solid rgba(255,51,68,0.35)",
+                          color: "#ff3344",
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </CardContent>

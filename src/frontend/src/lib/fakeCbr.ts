@@ -589,6 +589,9 @@ export function getLocalModifiers(): LocalModifier[] {
   return loadLocalModifiers().filter((m) => !m.appliedToLand);
 }
 
+export function getAllLocalModifiers(): LocalModifier[] {
+  return loadLocalModifiers();
+}
 export function addLocalModifier(
   mod: Omit<LocalModifier, "instanceId" | "addedAt">,
 ): void {

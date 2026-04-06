@@ -185,7 +185,10 @@ export default function Dashboard() {
                 flexDirection: "column",
               }}
             >
-              <CubeVisualization biome={currentLand.biome} />
+              <CubeVisualization
+                biome={currentLand.biome}
+                landId={currentLand.landId.toString()}
+              />
             </div>
 
             <div className="space-y-4">

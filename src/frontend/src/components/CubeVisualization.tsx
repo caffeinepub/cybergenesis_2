@@ -7,10 +7,12 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import AnchorBuilder from "./AnchorBuilder";
+import { InstalledModsLayer } from "./InstalledModsLayer";
 import LandModel from "./LandModel";
 
 interface CubeVisualizationProps {
   biome?: string;
+  landId?: string;
 }
 
 const BIOME_MODEL_MAP: Record<string, string> = {
@@ -433,7 +435,10 @@ function normalizeBiome(biome: string | undefined): string | undefined {
   return biome;
 }
 
-export default function CubeVisualization({ biome }: CubeVisualizationProps) {
+export default function CubeVisualization({
+  biome,
+  landId,
+}: CubeVisualizationProps) {
   const modelUrl = useMemo(() => {
     const normalized = normalizeBiome(biome);
     console.log(
@@ -452,6 +457,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
   const [anchorMode, setAnchorMode] = useState(false);
   const [orbitEnabled, setOrbitEnabled] = useState(true);
   const landGroupRef = useRef<THREE.Group>(null);
+  const [installRevision, setInstallRevision] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const toggleFullscreen = async () => {
@@ -475,10 +481,15 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
+  useEffect(() => {
+    const handler = () => setInstallRevision((v) => v + 1);
+    window.addEventListener("mods-updated", handler);
+    return () => window.removeEventListener("mods-updated", handler);
+  }, []);
   return (
     <div ref={containerRef} className="relative w-full h-full group">
       <Canvas
-        camera={{ position: [0, 0, 6], fov: 45 }}
+        camera={{ position: [0, 8, 22], fov: 42 }}
         dpr={[1, 2]}
         gl={{
           antialias: true,
@@ -498,14 +509,29 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           <CameraLayerSetup />
           <BackgroundSphere />
           {modelUrl && (
-            <LandModel ref={landGroupRef} modelUrl={modelUrl} biome={biome} />
+            <group scale={[12, 12, 12]}>
+              <LandModel
+                ref={landGroupRef}
+                modelUrl={modelUrl}
+                biome={normalizeBiome(biome) ?? "DEFAULT"}
+              />
+            </group>
           )}
           {anchorMode && modelUrl && (
             <AnchorBuilder
               landRef={landGroupRef}
-              finalLandScale={1}
+              finalLandScale={12}
               setOrbitEnabled={setOrbitEnabled}
             />
+          )}
+          {landId && modelUrl && (
+            <Suspense fallback={null}>
+              <InstalledModsLayer
+                landId={landId}
+                biome={normalizeBiome(biome) ?? ""}
+                installRevision={installRevision}
+              />
+            </Suspense>
           )}
           <Environment
             files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/artist_workshop_1k.hdr"
