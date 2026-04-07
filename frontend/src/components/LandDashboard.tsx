@@ -1,23 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useGetLandData, useGetTokenBalance, useClaimRewards, useUpgradePlot, useDebugTokenBalance, useGetCanisterTokenBalance, useDebugCanisterBalance, useGetModifierInventory, useApplyModifier } from '@/hooks/useQueries';
+import { useGetLandData, useGetTokenBalance, useClaimRewards, useUpgradePlot, useDebugTokenBalance, useGetCanisterTokenBalance, useDebugCanisterBalance } from '@/hooks/useQueries';
 import { formatTokenBalance } from '@/lib/tokenUtils';
-import { Loader2, MapPin, Zap, TrendingUp, ExternalLink } from 'lucide-react';
+import { Loader2, MapPin, Zap, TrendingUp, ExternalLink, Package } from 'lucide-react';
 import { toast } from 'sonner';
-import type { LandData, ModifierInstance } from '@/backend';
+import type { LandData } from '@/backend';
+import { getAllLocalModifiers, type LocalModifier } from '@/lib/fakeCbr';
+import { installMod, uninstallMod, getInstalledMods, type InstalledMod } from '@/lib/modInstallation';
 
 interface LandDashboardProps {
   selectedLandIndex: number;
+  onInstallChange?: () => void;
 }
 
-export default function LandDashboard({ selectedLandIndex }: LandDashboardProps) {
+const RARITY_COLORS: Record<number, string> = {
+  1: '#9CA3AF',
+  2: '#60A5FA',
+  3: '#A855F7',
+  4: '#FACC15',
+};
+
+const TIER_NAMES: Record<number, string> = {
+  1: 'Common',
+  2: 'Rare',
+  3: 'Legendary',
+  4: 'Mythic',
+};
+
+export default function LandDashboard({ selectedLandIndex, onInstallChange }: LandDashboardProps) {
   const { data: lands, isLoading: landsLoading } = useGetLandData();
   const { data: tokenBalance, isLoading: balanceLoading, error: balanceError } = useGetTokenBalance();
-  const { data: modifierInventory, isLoading: inventoryLoading } = useGetModifierInventory();
   const claimRewardsMutation = useClaimRewards();
   const upgradePlotMutation = useUpgradePlot();
   const debugBalanceMutation = useDebugTokenBalance();
-  const applyModifierMutation = useApplyModifier();
 
   // Admin-only canister balance
   const { data: canisterBalance } = useGetCanisterTokenBalance();
@@ -27,14 +42,35 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
   const [cooldownRemaining, setCooldownRemaining] = useState<number | null>(null);
   const [isCooldownActive, setIsCooldownActive] = useState(false);
 
+  // Local modifier inventory state (test mode)
+  const [localModifiers, setLocalModifiers] = useState<LocalModifier[]>([]);
+  const [installedMods, setInstalledMods] = useState<InstalledMod[]>([]);
+  const [installingId, setInstallingId] = useState<number | null>(null);
+
   const selectedLand: LandData | undefined = lands && lands[selectedLandIndex];
+  const landIdStr = selectedLand ? selectedLand.landId.toString() : '';
+
+  // Refresh local mod lists
+  const refreshLocalMods = useCallback(() => {
+    setLocalModifiers(getAllLocalModifiers());
+    if (landIdStr) {
+      setInstalledMods(getInstalledMods(landIdStr));
+    }
+  }, [landIdStr]);
+
+  useEffect(() => {
+    refreshLocalMods();
+    const handler = () => refreshLocalMods();
+    window.addEventListener('mods-updated', handler);
+    return () => window.removeEventListener('mods-updated', handler);
+  }, [refreshLocalMods]);
 
   // Calculate cooldown timer
   useEffect(() => {
     if (!selectedLand) return;
 
     const updateCooldown = () => {
-      const currentTime = Date.now() * 1_000_000; // Convert to nanoseconds
+      const currentTime = Date.now() * 1_000_000;
       const lastClaimTime = Number(selectedLand.lastClaimTime);
       const dayInNanos = 86_400_000_000_000;
       const nextClaimTime = lastClaimTime + dayInNanos;
@@ -51,7 +87,6 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
 
     updateCooldown();
     const interval = setInterval(updateCooldown, 1000);
-
     return () => clearInterval(interval);
   }, [selectedLand]);
 
@@ -61,13 +96,9 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
 
-    if (hours > 0) {
-      return `${hours}h ${minutes}m ${seconds}s`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${seconds}s`;
-    } else {
-      return `${seconds}s`;
-    }
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
   };
 
   const handleClaimRewards = async () => {
@@ -77,8 +108,7 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
       const result = await claimRewardsMutation.mutateAsync(selectedLand.landId);
 
       if (result.__kind__ === 'success') {
-        const formattedAmount = formatTokenBalance(result.success.tokensClaimed);
-        toast.success(`Claimed ${formattedAmount} CBR tokens!`);
+        toast.success(`Claimed ${formatTokenBalance(result.success.tokensClaimed)} CBR tokens!`);
       } else if (result.__kind__ === 'cooldown') {
         const hours = Math.floor(Number(result.cooldown.remainingTime) / 3600000000000);
         const minutes = Math.floor((Number(result.cooldown.remainingTime) % 3600000000000) / 60000000000);
@@ -88,9 +118,9 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
       } else if (result.__kind__ === 'mintFailed') {
         toast.error(`Minting error: ${result.mintFailed}`);
       }
-    } catch (error: any) {
-      console.error('Claim error:', error);
-      toast.error('Claim error: ' + (error.message || 'Unknown error'));
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Claim error: ' + msg);
     }
   };
 
@@ -98,7 +128,6 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
     if (!selectedLand) return;
 
     const cost = BigInt(1000);
-
     if (!tokenBalance || tokenBalance < cost) {
       toast.error(`Insufficient tokens. Required: ${formatTokenBalance(cost)} CBR`);
       return;
@@ -114,38 +143,38 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
       } else if (result.__kind__ === 'insufficientTokens') {
         toast.error(`Insufficient tokens. Required: ${formatTokenBalance(result.insufficientTokens.required)} CBR`);
       }
-    } catch (error: any) {
-      console.error('Upgrade error:', error);
-      toast.error('Upgrade error: ' + (error.message || 'Unknown error'));
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Upgrade error: ' + msg);
     }
   };
 
-  const handleDebugBalance = async () => {
-    try {
-      await debugBalanceMutation.mutateAsync();
-    } catch (error) {
-      console.error('Debug balance error:', error);
-    }
-  };
-
-  const handleDebugCanisterBalance = async () => {
-    try {
-      await debugCanisterBalanceMutation.mutateAsync();
-    } catch (error) {
-      console.error('Debug canister balance error:', error);
-    }
-  };
-
-  const handleApplyModifier = async (modifierInstanceId: bigint) => {
+  const handleInstallMod = async (instanceId: number) => {
     if (!selectedLand) return;
-
+    setInstallingId(instanceId);
     try {
-      await applyModifierMutation.mutateAsync({
-        modifierInstanceId,
-        landId: selectedLand.landId,
-      });
-    } catch (error: any) {
-      console.error('Apply modifier error:', error);
+      const result = installMod(instanceId, landIdStr);
+      if (result) {
+        toast.success(`Installed in slot ${result.slotId}`);
+        refreshLocalMods();
+        onInstallChange?.();
+      } else {
+        toast.error('No free slots available for this tier');
+      }
+    } finally {
+      setInstallingId(null);
+    }
+  };
+
+  const handleUninstallMod = (instanceId: number) => {
+    if (!selectedLand) return;
+    const ok = uninstallMod(instanceId, landIdStr);
+    if (ok) {
+      toast.success('Modifier removed from land');
+      refreshLocalMods();
+      onInstallChange?.();
+    } else {
+      toast.error('Could not remove modifier');
     }
   };
 
@@ -182,6 +211,9 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
     MYTHIC_AETHER: 'Mythic Aether',
   };
 
+  // Split modifiers: installed on this land vs not installed
+  const installedInstanceIds = new Set(installedMods.map((m) => m.instanceId));
+
   return (
     <div className="space-y-6">
       {/* CBR Balance Card */}
@@ -202,18 +234,12 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
             <div className="space-y-2">
               <p className="text-red-400 font-jetbrains">Balance unavailable</p>
               <button
-                onClick={handleDebugBalance}
+                type="button"
+                onClick={() => debugBalanceMutation.mutate()}
                 disabled={debugBalanceMutation.isPending}
                 className="px-4 py-2 rounded-lg btn-gradient-green text-black font-orbitron disabled:opacity-50"
               >
-                {debugBalanceMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                    Refreshing...
-                  </>
-                ) : (
-                  'Refresh Balance'
-                )}
+                {debugBalanceMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin mr-2 inline" />Refreshing...</> : 'Refresh Balance'}
               </button>
             </div>
           ) : (
@@ -222,18 +248,12 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
                 {formatTokenBalance(tokenBalance || BigInt(0))} CBR
               </p>
               <button
-                onClick={handleDebugBalance}
+                type="button"
+                onClick={() => debugBalanceMutation.mutate()}
                 disabled={debugBalanceMutation.isPending}
                 className="px-3 py-1 rounded glassmorphism text-[#00ffff] hover:text-[#00ffff] hover:bg-[#00ffff]/10 transition-all duration-300 text-sm font-jetbrains border border-[#00ffff]/30"
               >
-                {debugBalanceMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                    Refreshing...
-                  </>
-                ) : (
-                  'Refresh Balance'
-                )}
+                {debugBalanceMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin mr-2 inline" />Refreshing...</> : 'Refresh Balance'}
               </button>
             </div>
           )}
@@ -280,44 +300,15 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
             </div>
           </div>
 
-          {/* Attached Modifiers */}
-          {selectedLand.attachedModifications && selectedLand.attachedModifications.length > 0 && (
-            <div className="pt-4 border-t border-white/10">
-              <p className="text-white/70 text-sm mb-2 font-jetbrains">Attached modifiers:</p>
-              <div className="space-y-2">
-                {selectedLand.attachedModifications.map((mod) => (
-                  <div
-                    key={mod.modifierInstanceId.toString()}
-                    className="glassmorphism rounded-lg p-3 border border-[#9933ff]/30"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-white font-medium font-jetbrains">{mod.modifierType}</p>
-                        <p className="text-white/50 text-sm font-jetbrains">
-                          Tier {mod.rarity_tier.toString()} • +{(mod.multiplier_value * 100 - 100).toFixed(0)}%
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[#00ff41] text-sm font-jetbrains">ID: {mod.modifierInstanceId.toString()}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="flex gap-2 pt-2">
             <button
+              type="button"
               onClick={handleClaimRewards}
               disabled={claimRewardsMutation.isPending || isCooldownActive}
               className="flex-1 px-6 py-3 rounded-lg btn-gradient-green text-black font-bold font-orbitron disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {claimRewardsMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                  Claiming...
-                </>
+                <><Loader2 className="w-4 h-4 animate-spin mr-2 inline" />Claiming...</>
               ) : isCooldownActive && cooldownRemaining ? (
                 <>GET 100 CBR ({formatCooldownTime(cooldownRemaining)})</>
               ) : (
@@ -325,6 +316,7 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
               )}
             </button>
             <button
+              type="button"
               onClick={handleOpenMap}
               className="px-4 py-3 rounded-lg glassmorphism border border-[#00ffff]/30 text-[#00ffff] hover:bg-[#00ffff]/10 transition-all duration-300 box-glow-cyan"
             >
@@ -334,56 +326,111 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
         </CardContent>
       </Card>
 
-      {/* Modifier Inventory Card */}
+      {/* Modifier Inventory Card — shows ALL mods (installed + uninstalled) */}
       <Card className="glassmorphism neon-border box-glow-purple">
         <CardHeader>
           <CardTitle className="text-[#9933ff] flex items-center gap-2 font-orbitron text-glow-purple">
-            <TrendingUp className="w-5 h-5" />
+            <Package className="w-5 h-5" />
             MODIFIER INVENTORY
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {inventoryLoading ? (
-            <div className="flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-[#9933ff]" />
-              <span className="text-white/70 font-jetbrains">Loading inventory...</span>
-            </div>
-          ) : !modifierInventory || modifierInventory.length === 0 ? (
-            <p className="text-white/50 text-center py-4 font-jetbrains">No available modifiers</p>
+          {localModifiers.length === 0 && installedMods.length === 0 ? (
+            <p className="text-white/50 text-center py-4 font-jetbrains">
+              No modifiers yet — open loot caches in Discovery
+            </p>
           ) : (
             <div className="space-y-3">
-              {modifierInventory.map((modifier) => (
-                <div
-                  key={modifier.modifierInstanceId.toString()}
-                  className="glassmorphism rounded-lg p-4 border border-[#9933ff]/30 hover:border-[#9933ff]/50 transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="text-white font-medium font-jetbrains">{modifier.modifierType}</p>
-                      <p className="text-white/50 text-sm font-jetbrains">
-                        Tier {modifier.rarity_tier.toString()} • Multiplier: {modifier.multiplier_value}x
-                      </p>
+              {/* Uninstalled mods */}
+              {localModifiers.filter((m) => !installedInstanceIds.has(m.instanceId)).map((modifier) => {
+                const color = RARITY_COLORS[modifier.rarityTier] ?? '#9CA3AF';
+                const isInstalling = installingId === modifier.instanceId;
+                return (
+                  <div
+                    key={modifier.instanceId}
+                    className="glassmorphism rounded-lg p-4 transition-colors"
+                    style={{ border: `1px solid ${color}50` }}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-medium font-jetbrains truncate">{modifier.displayName}</p>
+                        <p className="text-white/50 text-sm font-jetbrains">
+                          <span style={{ color }}>{TIER_NAMES[modifier.rarityTier] ?? 'Unknown'}</span>
+                          {' · '}ID: {modifier.instanceId}
+                        </p>
+                      </div>
+                      {modifier.assetUrl && (
+                        <img
+                          src={modifier.assetUrl}
+                          alt={modifier.displayName}
+                          className="w-10 h-10 object-contain rounded ml-3 flex-shrink-0"
+                        />
+                      )}
                     </div>
-                    <div className="text-right">
-                      <p className="text-[#9933ff] text-xs font-jetbrains">ID: {modifier.modifierInstanceId.toString()}</p>
+                    <button
+                      type="button"
+                      onClick={() => handleInstallMod(modifier.instanceId)}
+                      disabled={isInstalling}
+                      className="w-full px-4 py-2 rounded-lg font-bold font-orbitron text-sm transition-all disabled:opacity-50"
+                      style={{
+                        background: `linear-gradient(135deg, ${color}30, ${color}15)`,
+                        border: `1px solid ${color}60`,
+                        color,
+                      }}
+                    >
+                      {isInstalling ? (
+                        <><Loader2 className="w-4 h-4 animate-spin mr-2 inline" />Installing...</>
+                      ) : (
+                        'INSTALL ON LAND'
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+
+              {/* Installed mods on this land */}
+              {installedMods.map((mod) => {
+                const color = RARITY_COLORS[mod.rarityTier] ?? '#9CA3AF';
+                return (
+                  <div
+                    key={mod.instanceId}
+                    className="glassmorphism rounded-lg p-4 transition-colors"
+                    style={{ border: `1px solid ${color}40`, background: 'rgba(0,0,0,0.4)' }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-medium font-jetbrains truncate">{mod.modifierName}</p>
+                        <p className="text-white/50 text-sm font-jetbrains">
+                          <span style={{ color }}>{TIER_NAMES[mod.rarityTier] ?? 'Unknown'}</span>
+                          {' · '}Slot: <span className="text-white/70">{mod.slotId}</span>
+                        </p>
+                      </div>
+                      {mod.assetUrl && (
+                        <img
+                          src={mod.assetUrl}
+                          alt={mod.modifierName}
+                          className="w-10 h-10 object-contain rounded ml-3 flex-shrink-0"
+                        />
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span
+                        className="text-xs font-jetbrains px-2 py-1 rounded"
+                        style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}
+                      >
+                        ✓ INSTALLED
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleUninstallMod(mod.instanceId)}
+                        className="text-xs font-jetbrains px-3 py-1 rounded transition-colors text-red-400 border border-red-500/30 hover:bg-red-500/10"
+                      >
+                        REMOVE
+                      </button>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleApplyModifier(modifier.modifierInstanceId)}
-                    disabled={applyModifierMutation.isPending || !selectedLand}
-                    className="w-full px-4 py-2 rounded-lg btn-gradient-purple text-white font-bold font-orbitron disabled:opacity-50"
-                  >
-                    {applyModifierMutation.isPending ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                        Applying...
-                      </>
-                    ) : (
-                      'APPLY TO LAND'
-                    )}
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -408,15 +455,13 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
               </p>
             </div>
             <button
+              type="button"
               onClick={handleUpgradePlot}
               disabled={upgradePlotMutation.isPending || Number(selectedLand.upgradeLevel) >= 5}
               className="w-full px-6 py-3 rounded-lg btn-gradient-green text-black font-bold font-orbitron disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {upgradePlotMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                  Upgrading...
-                </>
+                <><Loader2 className="w-4 h-4 animate-spin mr-2 inline" />Upgrading...</>
               ) : Number(selectedLand.upgradeLevel) >= 5 ? (
                 'MAXIMUM LEVEL'
               ) : (
@@ -450,15 +495,13 @@ export default function LandDashboard({ selectedLandIndex }: LandDashboardProps)
               </p>
             </div>
             <button
-              onClick={handleDebugCanisterBalance}
+              type="button"
+              onClick={() => debugCanisterBalanceMutation.mutate()}
               disabled={debugCanisterBalanceMutation.isPending}
               className="w-full px-4 py-2 rounded-lg glassmorphism border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-all duration-300 font-orbitron disabled:opacity-50"
             >
               {debugCanisterBalanceMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                  Checking...
-                </>
+                <><Loader2 className="w-4 h-4 animate-spin mr-2 inline" />Checking...</>
               ) : (
                 'CHECK CANISTER BALANCE'
               )}

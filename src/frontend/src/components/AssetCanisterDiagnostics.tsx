@@ -289,7 +289,10 @@ export default function AssetCanisterDiagnostics() {
 
       if (landActor) {
         try {
-          const cycleResult = await landActor.getAssetCanisterCycleBalance();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const cycleResult = await (
+            landActor as any
+          ).getAssetCanisterCycleBalance();
           const responseText =
             cycleResult.__kind__ === "ok" ? cycleResult.ok : "";
           const data = JSON.parse(responseText);
@@ -361,8 +364,10 @@ export default function AssetCanisterDiagnostics() {
 
       if (landActor && assetActor) {
         try {
-          const _landRole = await landActor.getCallerUserRole();
-          const _assetRole = await assetActor.getCallerUserRole();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const _landRole = await (landActor as any).getCallerUserRole();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const _assetRole = await (assetActor as any).getCallerUserRole();
           const duration8 = performance.now() - startTime8;
           updateTest(
             "Inter-Canister Communication",

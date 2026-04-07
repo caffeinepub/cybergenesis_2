@@ -1,6 +1,6 @@
-import type { LandData } from "@/backend";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import type { LandData } from "@/types";
 import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 import React from "react";
 

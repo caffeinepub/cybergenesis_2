@@ -1,4 +1,3 @@
-import type { LootCache, Result_1, Result_3 } from "@/backend";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -16,10 +15,17 @@ import {
 import * as fakeCbr from "@/lib/fakeCbr";
 import type { LootDropEntry } from "@/lib/fakeCbr";
 import { formatTokenBalance } from "@/lib/tokenUtils";
+import type { LootCache, Result_1, Result_3 } from "@/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { Clock, Gift, Loader2, Package, Sparkles, Zap } from "lucide-react";
 import React, { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
+
+// Runtime cast — backendInterface is empty in d.ts, cast to any for dynamic actor calls
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toAnyActor(actor: unknown): any {
+  return actor;
+}
 
 function getModifierAssetUrl(modifierName: string): string {
   const normalized = modifierName
@@ -154,10 +160,11 @@ export default function Discovery() {
 
   const initModifiersAndLoadCaches = async () => {
     if (!actor) return;
+    const a = toAnyActor(actor);
     try {
-      const existing = await actor.getAllModifiers();
+      const existing = await a.getAllModifiers();
       if (existing.length === 0) {
-        await actor.adminSetAllModifiers(
+        await a.adminSetAllModifiers(
           PLANNED_MODIFIER_CATALOG.slice(0, 7).map((m, i) => ({
             mod_id: BigInt(i),
             rarity_tier: BigInt(m.rarity_tier),
@@ -177,11 +184,12 @@ export default function Discovery() {
     if (!actor) return;
     setCachesLoading(true);
     try {
-      const result = await actor.getMyLootCaches();
+      const result = await toAnyActor(actor).getMyLootCaches();
       const openedIds = fakeCbr.getOpenedCacheIds();
       setCaches(
         result.filter(
-          (c) => !c.is_opened && !openedIds.includes(c.cache_id.toString()),
+          (c: LootCache & { is_opened?: boolean; cache_id: bigint }) =>
+            !c.is_opened && !openedIds.includes(c.cache_id.toString()),
         ),
       );
     } catch (error) {
@@ -220,7 +228,9 @@ export default function Discovery() {
 
     setDiscoveringTier(tier);
     try {
-      const result: Result_3 = await actor.discoverLootCache(BigInt(tier));
+      const result: Result_3 = await toAnyActor(actor).discoverLootCache(
+        BigInt(tier),
+      );
       if (result.__kind__ === "ok") {
         toast.success(`Кэш уровня ${tier} обнаружен!`);
         await loadCaches();
@@ -253,7 +263,7 @@ export default function Discovery() {
 
     try {
       try {
-        const result: Result_1 = await actor.processCache(cacheId);
+        const result: Result_1 = await toAnyActor(actor).processCache(cacheId);
         console.log("Backend processCache result:", result);
       } catch (backendError: any) {
         console.warn(
@@ -345,7 +355,8 @@ export default function Discovery() {
   const getTimeRemaining = (cache: LootCache) => {
     const fourHoursNs = BigInt(4 * 60 * 60) * BigInt(1_000_000_000);
     const nowNs = BigInt(Date.now()) * BigInt(1_000_000);
-    const elapsed = nowNs - cache.discovered_at;
+    const elapsed =
+      nowNs - (cache.discovered_at ?? cache.createdAt ?? BigInt(0));
     const remaining = fourHoursNs - elapsed;
     if (remaining <= BigInt(0)) return null;
     const totalSec = Number(remaining / BigInt(1_000_000_000));

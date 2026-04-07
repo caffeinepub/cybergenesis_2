@@ -1,0 +1,110 @@
+// Version: 1.0.0
+type Coordinates__108420619 = {lat : Float; lon : Float};
+type Data__791452850<K, V> =
+  {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type GameUserProfile__687315407 =
+  {
+    landIds : [Nat];
+    landTokenBalance : Nat;
+    modifierInstanceIds : [Nat];
+    owner : Principal
+  };
+type Int__270357528 = Int__616954475;
+type Int__616954475 = Int;
+type Internal__8484328<K, V> =
+  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type LandData__450150713 =
+  {
+    attachedModifications : [ModifierInstance__87965708];
+    baseTokenMultiplier : Float;
+    biome : Text;
+    chargeCap : Nat;
+    coordinates : Coordinates__108420619;
+    cycleCharge : Int;
+    decorationURL : ?Text;
+    landId : Nat;
+    lastChargeUpdate : Time__900049286;
+    lastClaimTime : Time__900049286;
+    plotName : Text;
+    principal : Principal;
+    upgradeLevel : Nat
+  };
+type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type LootCache__495172931 =
+  {
+    cache_id : Nat;
+    discovered_at : Time__900049286;
+    is_opened : Bool;
+    owner : Principal;
+    tier : Nat
+  };
+type Map__158565046<K, V> = Map__297112838<K, V>;
+type Map__297112838<K, V> =
+  {var root : Node__46230540<K, V>; var size : Nat__490723111};
+type Map__605269027<K, V> = Map__158565046<K, V>;
+type ModifierInstance__87965708 =
+  {
+    model_url : Text;
+    modifierInstanceId : Nat;
+    modifierType : Text;
+    multiplier_value : Float;
+    rarity_tier : Nat
+  };
+type Modifier__820836865 =
+  {
+    asset_url : Text;
+    mod_id : Nat;
+    multiplier_value : Float;
+    name : Text;
+    rarity_tier : Nat
+  };
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type Node__46230540<K, V> =
+  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type Time__796480547 = Int__270357528;
+type Time__900049286 = Time__796480547;
+type UserProfile__491224006 = {name : Text};
+type UserRole__521596351 = {#admin; #guest; #user};
+actor {
+  stable accessControlState :
+    {
+      var adminAssigned : Bool;
+      userRoles : Map__605269027<Principal, UserRole__521596351>
+    };
+  stable biomes : [Text];
+  stable gameUserProfiles :
+    {
+      var root : Node__46230540<Principal, GameUserProfile__687315407>;
+      var size : Nat__490723111
+    };
+  stable var governanceCanister : ?Principal;
+  stable lands :
+    {
+      var root : Node__46230540<Nat, LandData__450150713>;
+      var size : Nat__490723111
+    };
+  stable lootCaches :
+    {
+      var root : Node__46230540<Nat, LootCache__495172931>;
+      var size : Nat__490723111
+    };
+  stable var marketplaceCanister : ?Principal;
+  stable modifierInstances :
+    {
+      var root : Node__46230540<Nat, ModifierInstance__87965708>;
+      var size : Nat__490723111
+    };
+  stable modifierOwners :
+    {var root : Node__46230540<Nat, Principal>; var size : Nat__490723111};
+  stable var modifiers : [Modifier__820836865];
+  stable var nextCacheId : Nat;
+  stable var nextLandId : Nat;
+  stable var nextModifierInstanceId : Nat;
+  stable var tokenCanister : ?Principal;
+  stable userProfiles :
+    {
+      var root : Node__46230540<Principal, UserProfile__491224006>;
+      var size : Nat__490723111
+    }
+};

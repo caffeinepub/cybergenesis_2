@@ -1,4 +1,3 @@
-import type { LandData } from "@/backend";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BOOSTER_CATALOG, CRYSTAL_CATALOG } from "@/data/modifierCatalog";
 import {
@@ -19,6 +18,7 @@ import {
   uninstallMod,
 } from "@/lib/modInstallation";
 import { formatTokenBalance } from "@/lib/tokenUtils";
+import type { LandData } from "@/types";
 import {
   BatteryCharging,
   ExternalLink,
@@ -189,26 +189,28 @@ export default function LandDashboard({
   const handleClaimRewards = async () => {
     if (!selectedLand) return;
     try {
-      const result = await claimRewardsMutation.mutateAsync(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (await claimRewardsMutation.mutateAsync(
         selectedLand.landId,
-      );
-      if (result.__kind__ === "success") {
+      )) as any;
+      if (result?.__kind__ === "success") {
         toast.success(
-          `Claimed ${formatTokenBalance(result.success.tokensClaimed)} CBR tokens!`,
+          `Claimed ${formatTokenBalance(result.success?.tokensClaimed ?? BigInt(0))} CBR tokens!`,
         );
-      } else if (result.__kind__ === "cooldown") {
+      } else if (result?.__kind__ === "cooldown") {
         const hours = Math.floor(
-          Number(result.cooldown.remainingTime) / 3600000000000,
+          Number(result.cooldown?.remainingTime ?? 0) / 3600000000000,
         );
         const minutes = Math.floor(
-          (Number(result.cooldown.remainingTime) % 3600000000000) / 60000000000,
+          (Number(result.cooldown?.remainingTime ?? 0) % 3600000000000) /
+            60000000000,
         );
         toast.error(`Please wait ${hours}h ${minutes}m more`);
-      } else if (result.__kind__ === "insufficientCharge") {
+      } else if (result?.__kind__ === "insufficientCharge") {
         toast.error(
-          `Insufficient charge. Required: ${result.insufficientCharge.required}, available: ${result.insufficientCharge.current}`,
+          `Insufficient charge. Required: ${result.insufficientCharge?.required}, available: ${result.insufficientCharge?.current}`,
         );
-      } else if (result.__kind__ === "mintFailed") {
+      } else if (result?.__kind__ === "mintFailed") {
         toast.error(`Minting error: ${result.mintFailed}`);
       }
     } catch (error: any) {
@@ -253,17 +255,18 @@ export default function LandDashboard({
       return;
     }
     try {
-      const result = await upgradePlotMutation.mutateAsync({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (await upgradePlotMutation.mutateAsync({
         landId: selectedLand.landId,
         cost,
-      });
-      if (result.__kind__ === "success") {
-        toast.success(`Plot upgraded to level ${result.success.newLevel}!`);
-      } else if (result.__kind__ === "maxLevelReached") {
+      })) as any;
+      if (result?.__kind__ === "success") {
+        toast.success(`Plot upgraded to level ${result.success?.newLevel}!`);
+      } else if (result?.__kind__ === "maxLevelReached") {
         toast.error("Maximum level reached");
-      } else if (result.__kind__ === "insufficientTokens") {
+      } else if (result?.__kind__ === "insufficientTokens") {
         toast.error(
-          `Insufficient tokens. Required: ${formatTokenBalance(result.insufficientTokens.required)} CBR`,
+          `Insufficient tokens. Required: ${formatTokenBalance(result.insufficientTokens?.required ?? BigInt(0))} CBR`,
         );
       }
     } catch (error: any) {
@@ -434,8 +437,13 @@ export default function LandDashboard({
                 Coordinates
               </p>
               <p className="text-white font-medium font-jetbrains">
-                {selectedLand.coordinates.lat.toFixed(2)},{" "}
-                {selectedLand.coordinates.lon.toFixed(2)}
+                {selectedLand.coordinates.lat != null
+                  ? selectedLand.coordinates.lat.toFixed(2)
+                  : Number(selectedLand.coordinates.x).toFixed(2)}
+                ,{" "}
+                {selectedLand.coordinates.lon != null
+                  ? selectedLand.coordinates.lon.toFixed(2)
+                  : Number(selectedLand.coordinates.y).toFixed(2)}
               </p>
             </div>
             <div>
@@ -482,26 +490,30 @@ export default function LandDashboard({
                   Attached modifiers:
                 </p>
                 <div className="space-y-2">
-                  {selectedLand.attachedModifications.map((mod) => (
-                    <div
-                      key={mod.modifierInstanceId.toString()}
-                      className="glassmorphism rounded-lg p-3 border border-[#9933ff]/30"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-white font-medium font-jetbrains">
-                            {mod.modifierType}
-                          </p>
-                          <p className="text-white/50 text-sm font-jetbrains">
-                            Tier {mod.rarity_tier.toString()}
+                  {selectedLand.attachedModifications.map((mod) => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const m = mod as any;
+                    return (
+                      <div
+                        key={(m.modifierInstanceId ?? m).toString()}
+                        className="glassmorphism rounded-lg p-3 border border-[#9933ff]/30"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-white font-medium font-jetbrains">
+                              {m.modifierType ?? "Modifier"}
+                            </p>
+                            <p className="text-white/50 text-sm font-jetbrains">
+                              Tier {(m.rarity_tier ?? BigInt(1)).toString()}
+                            </p>
+                          </div>
+                          <p className="text-[#00ff41] text-sm font-jetbrains">
+                            ID: {(m.modifierInstanceId ?? m).toString()}
                           </p>
                         </div>
-                        <p className="text-[#00ff41] text-sm font-jetbrains">
-                          ID: {mod.modifierInstanceId.toString()}
-                        </p>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -489,7 +489,7 @@ export default function CubeVisualization({
   return (
     <div ref={containerRef} className="relative w-full h-full group">
       <Canvas
-        camera={{ position: [0, 8, 22], fov: 42 }}
+        camera={{ position: [0, 8, 22], fov: 42, near: 0.1, far: 500 }}
         dpr={[1, 2]}
         gl={{
           antialias: true,
@@ -545,7 +545,12 @@ export default function CubeVisualization({
           />
           <KeyLightSync />
           <SunLightSync />
-          <OrbitControls makeDefault enabled={orbitEnabled} />
+          <OrbitControls
+            makeDefault
+            enabled={orbitEnabled}
+            maxDistance={60}
+            minDistance={8}
+          />
           <SelectiveBloomEffect />
         </Suspense>
       </Canvas>

@@ -51,7 +51,8 @@ export function DeploymentVerification() {
     // Check LandCanister
     try {
       if (landActor) {
-        await landActor.getCallerUserRole();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (landActor as any).getCallerUserRole();
         updatedCanisters.push({
           name: "LandCanister",
           canisterId: "br5f7-7uaaa-aaaaa-qaaca-cai",

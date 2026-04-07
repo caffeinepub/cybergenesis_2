@@ -9,7 +9,6 @@ import {
   Vote,
 } from "lucide-react";
 import React, { useState, useEffect } from "react";
-import type { LandData } from "../backend";
 import BiomeAnchorEditor from "../components/BiomeAnchorEditor";
 import CubeVisualization from "../components/CubeVisualization";
 import Discovery from "../components/Discovery";
@@ -22,6 +21,7 @@ import Marketplace from "../components/Marketplace";
 import ThreeErrorBoundary from "../components/ThreeErrorBoundary";
 import { useActor } from "../hooks/useActor";
 import { useMintLand } from "../hooks/useQueries";
+import type { LandData } from "../types";
 import Collection from "./Collection";
 
 type TabType =
@@ -43,7 +43,8 @@ export default function Dashboard() {
     queryKey: ["landData"],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not initialized");
-      return actor.getLandData();
+      const a = actor as unknown as { getLandData(): Promise<LandData[]> };
+      return a.getLandData();
     },
     enabled: !!actor,
   });

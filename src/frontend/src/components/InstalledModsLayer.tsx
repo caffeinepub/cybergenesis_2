@@ -46,7 +46,6 @@ export function InstalledModsLayer({
   const [modObjects, setModObjects] = useState<ModEntry[]>([]);
   const abortRef = useRef(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: installRevision is a version counter to force re-runs; it is not used inside the callback directly
   useEffect(() => {
     abortRef.current = false;
     void installRevision; // dependency tracking — triggers re-run on install/uninstall
@@ -91,11 +90,12 @@ export function InstalledModsLayer({
       const maxAnisotropy = gl.capabilities.getMaxAnisotropy();
 
       // Apply texture quality settings
-      megaScene.traverse((child: any) => {
-        if (child.isMesh && child.material) {
-          const mats = Array.isArray(child.material)
-            ? child.material
-            : [child.material];
+      megaScene.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (mesh.isMesh && mesh.material) {
+          const mats = Array.isArray(mesh.material)
+            ? mesh.material
+            : [mesh.material];
           for (const m of mats as THREE.MeshStandardMaterial[]) {
             m.dithering = true;
             for (const tex of [

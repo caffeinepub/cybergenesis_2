@@ -1,0 +1,169 @@
+type http_request_result = 
+ record {
+   body: blob;
+   headers: vec http_header;
+   status: nat;
+ };
+type http_header = 
+ record {
+   name: text;
+   value: text;
+ };
+type UserRole = 
+ variant {
+   admin;
+   guest;
+   user;
+ };
+type UserProfile = record {name: text;};
+type UpgradeResult = 
+ variant {
+   insufficientTokens: record {
+                         current: nat;
+                         required: nat;
+                       };
+   maxLevelReached;
+   success: record {
+              newLevel: nat;
+              remainingTokens: nat;
+            };
+ };
+type TransformationOutput = 
+ record {
+   body: blob;
+   headers: vec http_header;
+   status: nat;
+ };
+type TransformationInput = 
+ record {
+   context: blob;
+   response: http_request_result;
+ };
+type TopLandEntry = 
+ record {
+   plotName: text;
+   "principal": principal;
+   tokenBalance: nat;
+   upgradeLevel: nat;
+ };
+type Time = int;
+type Result_4 = 
+ variant {
+   err: text;
+   ok: LandData;
+ };
+type Result_3 = 
+ variant {
+   err: text;
+   ok: LootCache;
+ };
+type Result_2 = 
+ variant {
+   err: text;
+   ok: text;
+ };
+type Result_1 = 
+ variant {
+   err: text;
+   ok: ModifierInstance;
+ };
+type Result = 
+ variant {
+   err: text;
+   ok;
+ };
+type ModifierInstance = 
+ record {
+   model_url: text;
+   modifierInstanceId: nat;
+   modifierType: text;
+   multiplier_value: float64;
+   rarity_tier: nat;
+ };
+type Modifier = 
+ record {
+   asset_url: text;
+   mod_id: nat;
+   multiplier_value: float64;
+   name: text;
+   rarity_tier: nat;
+ };
+type LootCache = 
+ record {
+   cache_id: nat;
+   discovered_at: Time;
+   is_opened: bool;
+   owner: principal;
+   tier: nat;
+ };
+type LandData = 
+ record {
+   attachedModifications: vec ModifierInstance;
+   baseTokenMultiplier: float64;
+   biome: text;
+   chargeCap: nat;
+   coordinates: Coordinates;
+   cycleCharge: int;
+   decorationURL: opt text;
+   landId: nat;
+   lastChargeUpdate: Time;
+   lastClaimTime: Time;
+   plotName: text;
+   "principal": principal;
+   upgradeLevel: nat;
+ };
+type Coordinates = 
+ record {
+   lat: float64;
+   lon: float64;
+ };
+type ClaimResult = 
+ variant {
+   cooldown: record {
+               currentBalance: nat;
+               remainingTime: int;
+             };
+   insufficientCharge: record {
+                         current: int;
+                         required: nat;
+                       };
+   mintFailed: text;
+   success: record {
+              newBalance: nat;
+              nextClaimTime: int;
+              tokensClaimed: nat;
+            };
+ };
+service : {
+  _initializeAccessControlWithSecret: (userSecret: text) -> ();
+  adminGetLandData: (landId: nat) -> (opt LandData);
+  adminSetAllModifiers: (mods: vec Modifier) -> (Result);
+  applyModifier: (landId: nat, modifierInstanceId: nat) -> (Result_4);
+  assignCallerUserRole: (user: principal, role: UserRole) -> ();
+  claimRewards: (landId: nat) -> (ClaimResult);
+  discoverLootCache: (tier: nat) -> (Result_3);
+  getAllModifiers: () -> (vec Modifier) query;
+  getAssetCanisterCycleBalance: () -> (Result_2);
+  getCallerUserProfile: () -> (opt UserProfile) query;
+  getCallerUserRole: () -> (UserRole) query;
+  getCurrentCbrBalance: () -> (float64) query;
+  getLandData: () -> (vec LandData);
+  getLandDataQuery: (landId: nat) -> (opt LandData) query;
+  getLandOwner: (landId: nat) -> (opt principal) query;
+  getMyLootCaches: () -> (vec LootCache) query;
+  getMyModifications: () -> (vec ModifierInstance) query;
+  getTopLands: (_n: nat) -> (vec TopLandEntry) query;
+  getUserProfile: (user: principal) -> (opt UserProfile) query;
+  isCallerAdmin: () -> (bool) query;
+  mintLand: () -> (LandData);
+  processCache: (cache_id: nat) -> (Result_1);
+  saveCallerUserProfile: (profile: UserProfile) -> ();
+  setGovernanceCanister: (p: principal) -> ();
+  setMarketplaceCanister: (p: principal) -> ();
+  setTokenCanister: (p: principal) -> ();
+  transferLand: (landId: nat, to: principal) -> (bool);
+  transform: (raw: TransformationInput) -> (TransformationOutput) query;
+  updateDecoration: (landId: nat, url: opt text) -> (Result);
+  updatePlotName: (landId: nat, name: text) -> (Result);
+  upgradePlot: (landId: nat, cost: nat) -> (UpgradeResult);
+}

@@ -26,7 +26,12 @@ export default function ProfileSetup() {
     }
 
     try {
-      await saveProfile.mutateAsync({ name: name.trim() });
+      await saveProfile.mutateAsync({
+        name: name.trim(),
+        username: name.trim(),
+        avatarUrl: "",
+        bio: "",
+      });
       toast.success("Профиль успешно создан!");
     } catch (error) {
       console.error("Profile save error:", error);

@@ -1,17 +1,36 @@
+import * as fakeCbr from "@/lib/fakeCbr";
+import { formatTokenBalance } from "@/lib/tokenUtils";
 import type {
   LandData,
   ModifierInstance,
   Time,
   TopLandEntry,
   UserProfile,
-} from "@/backend";
-import * as fakeCbr from "@/lib/fakeCbr";
-import { formatTokenBalance } from "@/lib/tokenUtils";
+} from "@/types";
 import type { Principal } from "@icp-sdk/core/principal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useActor } from "./useActor";
 import { useInternetIdentity } from "./useInternetIdentity";
+
+// Runtime actor interface — cast from backendInterface for actual method calls
+interface RuntimeActor {
+  getLandData(): Promise<LandData[]>;
+  getCallerUserProfile(): Promise<UserProfile | null>;
+  saveCallerUserProfile(profile: UserProfile): Promise<void>;
+  claimRewards(landId: bigint): Promise<unknown>;
+  upgradePlot(landId: bigint, cost: bigint): Promise<unknown>;
+  updatePlotName(landId: bigint, name: string): Promise<void>;
+  updateDecoration(landId: bigint, url: string): Promise<void>;
+  getMyModifications(): Promise<ModifierInstance[]>;
+  applyModifier(modifierInstanceId: bigint, landId: bigint): Promise<void>;
+  mintLand(): Promise<unknown>;
+  getTopLands(limit: bigint): Promise<TopLandEntry[]>;
+}
+
+function asRuntimeActor(actor: unknown): RuntimeActor {
+  return actor as RuntimeActor;
+}
 
 // Placeholder types for governance and marketplace (not yet in backend)
 interface Proposal {
@@ -124,7 +143,7 @@ export function useGetLandData() {
     queryFn: async () => {
       if (!actor) return [];
       console.log("Fetching land data...");
-      const result = await actor.getLandData();
+      const result = await asRuntimeActor(actor).getLandData();
       console.log("Land data fetched:", result);
       return result;
     },
@@ -142,7 +161,7 @@ export function useGetCallerUserProfile() {
     queryKey: ["currentUserProfile"],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not available");
-      return actor.getCallerUserProfile();
+      return asRuntimeActor(actor).getCallerUserProfile();
     },
     enabled: !!actor && !actorFetching,
     retry: false,
@@ -164,7 +183,7 @@ export function useSaveCallerUserProfile() {
     mutationFn: async (profile: UserProfile) => {
       if (!actor) throw new Error("Actor not available");
       console.log("Saving user profile:", profile);
-      await actor.saveCallerUserProfile(profile);
+      await asRuntimeActor(actor).saveCallerUserProfile(profile);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["currentUserProfile"] });
@@ -299,7 +318,7 @@ export function useClaimRewards() {
     mutationFn: async (landId: bigint) => {
       if (!actor) throw new Error("Actor not available");
       console.log("Claiming rewards for land:", landId);
-      const result = await actor.claimRewards(landId);
+      const result = await asRuntimeActor(actor).claimRewards(landId);
       console.log("Claim result:", result);
       return result;
     },
@@ -327,7 +346,7 @@ export function useUpgradePlot() {
     mutationFn: async ({ landId, cost }: { landId: bigint; cost: bigint }) => {
       if (!actor) throw new Error("Actor not available");
       console.log("Upgrading plot:", landId, "Cost:", cost);
-      const result = await actor.upgradePlot(landId, cost);
+      const result = await asRuntimeActor(actor).upgradePlot(landId, cost);
       console.log("Upgrade result:", result);
       return result;
     },
@@ -352,7 +371,7 @@ export function useUpdatePlotName() {
   return useMutation({
     mutationFn: async ({ landId, name }: { landId: bigint; name: string }) => {
       if (!actor) throw new Error("Actor not available");
-      await actor.updatePlotName(landId, name);
+      await asRuntimeActor(actor).updatePlotName(landId, name);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["landData"] });
@@ -375,7 +394,7 @@ export function useUpdateDecoration() {
   return useMutation({
     mutationFn: async ({ landId, url }: { landId: bigint; url: string }) => {
       if (!actor) throw new Error("Actor not available");
-      await actor.updateDecoration(landId, url);
+      await asRuntimeActor(actor).updateDecoration(landId, url);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["landData"] });
@@ -399,7 +418,7 @@ export function useGetModifierInventory() {
     queryFn: async () => {
       if (!actor) return [];
       console.log("Fetching modifier inventory via getMyModifications...");
-      const result = await actor.getMyModifications();
+      const result = await asRuntimeActor(actor).getMyModifications();
       console.log("Modifier inventory fetched:", result);
       return result;
     },
@@ -420,7 +439,7 @@ export function useApplyModifier() {
     }: { modifierInstanceId: bigint; landId: bigint }) => {
       if (!actor) throw new Error("Actor not available");
       console.log("Applying modifier:", modifierInstanceId, "to land:", landId);
-      await actor.applyModifier(modifierInstanceId, landId);
+      await asRuntimeActor(actor).applyModifier(modifierInstanceId, landId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["landData"] });
@@ -445,7 +464,7 @@ export function useMintLand() {
     mutationFn: async () => {
       if (!actor) throw new Error("Actor not available");
       console.log("Minting new land...");
-      const result = await actor.mintLand();
+      const result = await asRuntimeActor(actor).mintLand();
       console.log("Mint result:", result);
       return result;
     },
@@ -471,7 +490,7 @@ export function useGetTopLands() {
     queryFn: async () => {
       if (!actor) return [];
       console.log("Fetching top lands...");
-      const result = await actor.getTopLands(BigInt(10));
+      const result = await asRuntimeActor(actor).getTopLands(BigInt(10));
       console.log("Top lands fetched:", result);
       return result;
     },
@@ -489,7 +508,7 @@ export function useGetMyModifications() {
     queryFn: async () => {
       if (!actor) return [];
       console.log("Fetching my modifications...");
-      const result = await actor.getMyModifications();
+      const result = await asRuntimeActor(actor).getMyModifications();
       console.log("My modifications fetched:", result);
       return result;
     },

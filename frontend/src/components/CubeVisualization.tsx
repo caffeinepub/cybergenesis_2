@@ -7,9 +7,12 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import LandModel from "./LandModel";
+import { InstalledModsLayer } from "./InstalledModsLayer";
 
 interface CubeVisualizationProps {
   biome?: string;
+  landId?: string;
+  installRevision?: number;
 }
 
 const BIOME_MODEL_MAP: Record<string, string> = {
@@ -429,7 +432,7 @@ function normalizeBiome(biome: string | undefined): string | undefined {
   return biome;
 }
 
-export default function CubeVisualization({ biome }: CubeVisualizationProps) {
+export default function CubeVisualization({ biome, landId, installRevision = 0 }: CubeVisualizationProps) {
   const modelUrl = useMemo(() => {
     const normalized = normalizeBiome(biome);
     console.log(
@@ -471,7 +474,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
   return (
     <div ref={containerRef} className="relative w-full h-full group">
       <Canvas
-        camera={{ position: [0, 0, 6], fov: 45 }}
+        camera={{ position: [0, 10, 30], fov: 42, near: 0.1, far: 500 }}
         dpr={[1, 2]}
         gl={{
           antialias: true,
@@ -490,7 +493,18 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           <SceneSetup />
           <CameraLayerSetup />
           <BackgroundSphere />
-          {modelUrl && <LandModel modelUrl={modelUrl} biome={biome} />}
+          {modelUrl && (
+            <group scale={[12, 12, 12]}>
+              <LandModel modelUrl={modelUrl} biome={biome} />
+            </group>
+          )}
+          {modelUrl && landId && (
+            <InstalledModsLayer
+              landId={landId}
+              biome={normalizeBiome(biome) ?? ""}
+              installRevision={installRevision}
+            />
+          )}
           <Environment
             files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/artist_workshop_1k.hdr"
             environmentIntensity={1.45}
@@ -503,7 +517,7 @@ export default function CubeVisualization({ biome }: CubeVisualizationProps) {
           />
           <KeyLightSync />
           <SunLightSync />
-          <OrbitControls makeDefault />
+          <OrbitControls makeDefault maxDistance={60} minDistance={8} />
           <SelectiveBloomEffect />
         </Suspense>
       </Canvas>

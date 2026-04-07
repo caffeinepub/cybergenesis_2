@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useActor } from '../hooks/useActor';
 import LandDashboard from '../components/LandDashboard';
@@ -7,10 +7,10 @@ import Collection from './Collection';
 import Leaderboard from '../components/Leaderboard';
 import Marketplace from '../components/Marketplace';
 import Governance from '../components/Governance';
-import MapView from '../components/MapView';
+import MapViewComponent from '../components/MapView';
 import CubeVisualization from '../components/CubeVisualization';
 import LandSelector from '../components/LandSelector';
-import { Compass, Trophy, ShoppingCart, Vote, Map, BookOpen } from 'lucide-react';
+import { Compass, Trophy, ShoppingCart, Vote, BookOpen } from 'lucide-react';
 import type { LandData } from '../backend';
 
 type TabType = 'land' | 'discovery' | 'collection' | 'leaderboard' | 'marketplace' | 'governance' | 'map';
@@ -19,6 +19,7 @@ export default function Dashboard() {
   const { actor } = useActor();
   const [activeTab, setActiveTab] = useState<TabType>('land');
   const [selectedLandIndex, setSelectedLandIndex] = useState(0);
+  const [installRevision, setInstallRevision] = useState(0);
 
   const { data: lands, isLoading } = useQuery<LandData[]>({
     queryKey: ['landData'],
@@ -46,6 +47,10 @@ export default function Dashboard() {
       });
     }
   }, [lands, selectedLandIndex]);
+
+  const handleInstallChange = useCallback(() => {
+    setInstallRevision((r) => r + 1);
+  }, []);
 
   if (isLoading) {
     return (
@@ -82,7 +87,7 @@ export default function Dashboard() {
     { id: 'leaderboard' as TabType, icon: Trophy, label: 'Рейтинг' },
     { id: 'marketplace' as TabType, icon: ShoppingCart, label: 'Рынок' },
     { id: 'governance' as TabType, icon: Vote, label: 'Управление' },
-    { id: 'map' as TabType, icon: Map, label: 'Карта' },
+    { id: 'map' as TabType, icon: Compass, label: 'Карта' },
   ];
 
   const handleMapClose = () => {
@@ -94,7 +99,7 @@ export default function Dashboard() {
   return (
     <div className="dashboard-container flex flex-col min-h-screen bg-transparent">
       {isMapOpen && (
-        <MapView landData={currentLand} onClose={handleMapClose} />
+        <MapViewComponent landData={currentLand} onClose={handleMapClose} />
       )}
 
       <div className="dashboard min-h-screen text-white relative overflow-hidden">
@@ -110,7 +115,7 @@ export default function Dashboard() {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <div 
+            <div
               className="lg:col-span-2 rounded-lg overflow-hidden glassmorphism neon-border box-glow-cyan animate-pulse-glow"
               style={{
                 minHeight: '65vh',
@@ -119,7 +124,11 @@ export default function Dashboard() {
                 flexDirection: 'column',
               }}
             >
-              <CubeVisualization biome={currentLand.biome} />
+              <CubeVisualization
+                biome={currentLand.biome}
+                landId={currentLand.landId.toString()}
+                installRevision={installRevision}
+              />
             </div>
 
             <div className="space-y-4">
@@ -129,6 +138,7 @@ export default function Dashboard() {
                   return (
                     <button
                       key={tab.id}
+                      type="button"
                       onClick={() => setActiveTab(tab.id)}
                       className={`
                         flex items-center justify-center gap-2 px-4 py-3 rounded-lg
@@ -150,7 +160,12 @@ export default function Dashboard() {
           </div>
 
           <div className="rounded-lg glassmorphism neon-border box-glow-purple p-6">
-            {activeTab === 'land' && <LandDashboard selectedLandIndex={selectedLandIndex} />}
+            {activeTab === 'land' && (
+              <LandDashboard
+                selectedLandIndex={selectedLandIndex}
+                onInstallChange={handleInstallChange}
+              />
+            )}
             {activeTab === 'discovery' && <Discovery />}
             {activeTab === 'collection' && <Collection />}
             {activeTab === 'leaderboard' && <Leaderboard />}

@@ -111,7 +111,8 @@ export default function AssetCanisterReinitializer() {
 
       // Verify Land Canister is operational
       try {
-        await landActor.isCallerAdmin();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (landActor as any).isCallerAdmin();
         console.log("[PreCheck] ✓ Land Canister operational");
       } catch (_error) {
         toast.error("Land Canister не отвечает");
@@ -153,8 +154,20 @@ export default function AssetCanisterReinitializer() {
       // Verify Asset Canister health
       const healthChecks = [
         { name: "List Assets", fn: () => assetActor.listAssets() },
-        { name: "Check Admin Status", fn: () => assetActor.isCallerAdmin() },
-        { name: "Get User Role", fn: () => assetActor.getCallerUserRole() },
+        {
+          name: "Check Admin Status",
+          fn: () =>
+            (
+              assetActor as unknown as Record<string, () => Promise<unknown>>
+            ).isCallerAdmin(),
+        },
+        {
+          name: "Get User Role",
+          fn: () =>
+            (
+              assetActor as unknown as Record<string, () => Promise<unknown>>
+            ).getCallerUserRole(),
+        },
         { name: "List GLB Models", fn: () => assetActor.listGLBModels() },
       ];
 
@@ -171,7 +184,8 @@ export default function AssetCanisterReinitializer() {
 
       // Verify Land Canister still operational
       try {
-        await landActor.isCallerAdmin();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (landActor as any).isCallerAdmin();
         console.log("[PostCheck] ✓ Land Canister still operational");
       } catch (_error) {
         console.error("[PostCheck] ✗ Land Canister check failed");
@@ -314,7 +328,8 @@ export default function AssetCanisterReinitializer() {
       }
 
       try {
-        await landActor.isCallerAdmin();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (landActor as any).isCallerAdmin();
         console.log("[Step 4/4] ✓ Land Canister fully operational");
         updateStep(
           "Проверка работоспособности Land Canister",
